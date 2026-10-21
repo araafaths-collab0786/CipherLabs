@@ -1,0 +1,836 @@
+CIPHER LABS - PHASED BUILD PROMPT (v3)
+======================================
+
+This version replaces Cipher_Labs_Phased_Build_Prompt_v2.txt and Cipher_Labs_Full_Build_Prompt.txt. Do not use the older files.
+
+Changes from v2 (all corrections are built into the text below):
+• Tauri project lives inside frontend/ (frontend/src-tauri). One package root, one set of build commands.
+• Sidecar is launched from Rust with the shell plugin, and the capability file grants shell:allow-spawn for that sidecar only.
+• Signup creates the profile row through a database trigger on auth.users, so it does not depend on a session or client-side insert.
+• Supabase is the permanent source of truth. A small offline queue holds pending-sync metadata only (not a database), with idempotent sync.
+• Simulation results use simulation-specific labels. They are never shown as physical erasure verification.
+• Device records store only OS name, OS version, app version and the app-generated device ID. No CPU or hardware identifiers.
+• Phase 0 checks Supabase configuration without printing any secret value.
+
+
+PART 0 - HOW TO USE THIS PROMPT
+-------------------------------
+
+1. Paste PART 1 to PART 9 (locked decisions, design, auth, database, backend, packaging, offline rules, release rules) at the start of every session. This is the shared specification.
+2. Paste ONLY the phase block you are building from PART 11 (Phase 0, 1, 2 or 3).
+3. The builder writes complete files for that phase, runs the phase tests, and reports using PART 12.
+4. Do not start the next phase until the current gate is passed and reviewed.
+5. Fix errors inside the phase in which they are found. Use the actual error log as input. Do not rewrite unrelated code.
+6. A phase is not complete until its gate passes. A passing build is not the same as a working .exe.
+
+
+PART 1 - LOCKED DECISIONS (DO NOT CHANGE)
+-----------------------------------------
+
+Platform
+• Target: Windows 10 (21H2 or later) and Windows 11, 64-bit only.
+• Linux and macOS are out of scope. Do not add platform branches for them.
+
+Stack
+• Desktop shell: Tauri v2 (Rust stable, tauri and tauri-plugin-shell v2).
+• Frontend: React 18, TypeScript (strict), Vite, Tailwind CSS, Motion for React, lucide-react, react-router-dom, @supabase/supabase-js.
+• Local backend: Python 3.11, FastAPI, Pydantic v2, uvicorn, packaged with PyInstaller as a Tauri sidecar.
+• Database, authentication and authorisation: Supabase only (PostgreSQL, Supabase Auth, Row Level Security). This is the permanent source of truth for every user record.
+• Machine learning (Phase 2 only): scikit-learn, real trained-model outputs only.
+
+Project layout (exact; see PART 7)
+• Everything for the desktop app lives under frontend/. The Tauri project is frontend/src-tauri/.
+• The repository root holds only backend/, supabase/, scripts/, docs/, README.md, .gitignore, .env.example.
+
+Local storage rule
+• No SQLite and no other local database for user records.
+• The only local persistence is: (a) the app-data folder, (b) the offline pending-sync queue (PART 8), a small JSON file holding metadata only, removed entry by entry after successful sync.
+
+Keys and secrets
+• The app may hold the Supabase URL and the anon (publishable) key only.
+• The service-role key must never appear in the frontend, the sidecar, the installer, logs, or the repository. It is used only in one-off admin scripts that are never packaged.
+• The backend forwards the user's access token to Supabase so Row Level Security applies. The backend verifies the token before serving any protected endpoint.
+
+Scope of this release (Phases 0 to 3)
+• No real modification of any file or folder outside the app-data folder.
+• No real erasure of user data.
+• No scanning of internal or attached drives.
+• No raw device or disk access of any kind, not even behind a flag.
+• Erasure is SIMULATION ONLY (Phase 1). It never performs a physical erasure and never writes to any file.
+• Recovery works ONLY on test disk images the app creates inside its app-data folder (Phase 2).
+• Real destructive erasure and real drive recovery are a later release with its own design review. No code path for them may be added here.
+
+Privacy
+• Desktop app: no website cookies and no cookie banner. A cookie banner belongs to the later public website.
+• Privacy preferences are stored in the user's profile in Supabase and are read by the backend (log retention and export). They are real settings, not decoration.
+
+
+PART 2 - PRODUCT IDENTITY AND CORE RULES
+----------------------------------------
+
+Name: Cipher Labs
+Tagline: SECURE. RECOVER. VERIFY.
+Descriptor: Digital Forensics and Data Sanitization
+
+Rules the UI and backend must always respect
+• Execution and verification are separate states. "Completed" is never shown as "Verified" unless verification passed.
+• Simulation results are never labelled "Verified" or "Erased". They use the simulation labels in PART 2.1.
+• A recovery candidate is "Detected" or "Validated" until its output is written and re-validated. Only then is it "Recovered".
+• A hash match is an integrity comparison. It never proves secure erasure.
+• Flash media (SSD, USB, memory card) cannot be fully verified by software. Any future erasure report on such media must say so.
+• A failed or unverifiable outcome is shown as failed or UNVERIFIED. Success is shown only with a backend result that confirms it.
+• A database outage never turns a verified result into a failure, and never shows zeros that look like real data. Show "Unavailable" with a Retry action.
+
+PART 2.1 - SIMULATION LABELS (EXACT WORDING)
+• Operation type label: "Simulation".
+• Verification status values for simulations: SIMULATION_CHECK_PASSED or SIMULATION_CHECK_FAILED.
+• UI text for SIMULATION_CHECK_PASSED: "Simulation check passed. No file changes were detected. This is not physical erasure verification."
+• UI text for SIMULATION_CHECK_FAILED: "Simulation check failed. A file change was detected. Review the details before doing anything else."
+• Report text: "This is a simulation. No physical erasure was performed. The check confirms only that the simulated targets were not changed."
+• Forbidden words for simulation results anywhere in UI or reports: "Verified", "Erased", "Sanitized", "Destroyed".
+
+
+PART 3 - DESIGN SPECIFICATION (FROM THE APPROVED SCREENSHOTS)
+-------------------------------------------------------------
+
+Layout
+• Left sidebar about 260px wide, white (light) or deep navy (dark), with a right border.
+• Sidebar header: rounded cyan square (#06B6D4) with a white shield-check icon, bold "Cipher Labs", and small letter-spaced cyan text "SECURE. RECOVER. VERIFY.".
+• Sidebar items in this exact order, each with a Lucide icon: Dashboard, Secure Erasure, File Recovery, Verification Center, Reports & Audit, Devices, Settings.
+• Active item: light cyan pill (#E0F7FB light, #123A55 dark) with teal text (#0E7490 light, #67E8F9 dark).
+• Top bar about 64px tall: page title left, round dark-mode toggle right (Moon in light mode, Sun in dark mode). The choice is saved to the profile preferences and also applied immediately.
+• Page background #F3F6F8 (light) or #0B1F3A (dark). Cards white (dark #122A4D), 12px radius, 1px border, soft shadow, subtle lift on hover.
+• Content max width about 1200px, 32px padding.
+
+Colour tokens (CSS variables)
+--navy #0B1F3A, --cyan #06B6D4, --mist #F3F6F8, --cyan-text #0E7490,
+--success #16A34A (chip #DCFCE7), --danger #DC2626 (chip #FEE2E2),
+--warning #D97706 (chip #FEF3C7), --muted #64748B, --info #2563EB (chip #DBEAFE).
+
+Typography: Inter with system sans-serif fallback. Page title 28px bold. Subtitle 15px muted. Metric labels uppercase, small, letter-spaced.
+
+Buttons: primary cyan with white text, 8px radius, icon plus label. Hover darkens. Press scales to 0.98. Disabled is 45% opacity with not-allowed cursor. Secondary is white with border.
+
+Motion (Motion for React)
+• Route transitions: fade plus 8px vertical slide, 200 ms, AnimatePresence.
+• Micro-interactions 120 to 180 ms.
+• Progress bars show only real backend values.
+• prefers-reduced-motion: no transforms, opacity only.
+• Visible focus rings.
+
+Dashboard (route /), as in the screenshots
+• Heading "Dashboard", subtitle "Welcome back, {first name}. Here's your operation overview."
+• Four metric cards in one row:
+TOTAL OPERATIONS (all operations, simulations included).
+VERIFIED OPERATIONS (only operations whose verification_status is VERIFIED; simulations are excluded).
+DEVICES ASSESSED (registered devices).
+RECOVERY SCANS (Phase 2 scans; shows 0 with a note "Phase 2" until recovery is enabled).
+• Under the cards, one line of muted text: "Simulation checks passed: {n}. Simulations confirm that targets were not changed. They do not erase data." This line is required so simulation results are never mistaken for verified erasure.
+• Metric values come from the database. On error show "Unavailable" with Retry, never zero.
+• Two-column row: "Quick Actions" (New Erasure, New Recovery Scan, Verify Operation) and "Recent Activity" (last 8 operations, "View all" link). Empty state: inbox icon, "No operations yet", "Start your first secure erasure or recovery scan to see activity here.", cyan "+ New operation" button.
+• "Latest Reports" card with the last 3 reports and download buttons.
+
+Other pages
+• Secure Erasure (/erasure): list of simulations, "+ New simulation" button, wizard at /erasure/new (PART 11, Phase 1). The page title stays "Secure Erasure", and a banner under the title reads "Simulation only. No physical erasure is performed in this release."
+• File Recovery (/recovery): Phase 2 only. Before Phase 2 it shows "File recovery is available in a later release." with no action buttons.
+• Verification Center (/verification): table with separate Execution and Verification chips. Row opens a detail panel with checks, evidence, warnings, errors, and a "Re-verify" action that never changes execution status.
+• Reports & Audit (/reports): reports table (View, Export PDF, Export JSON) and the audit log with "Verify audit chain".
+• Devices (/devices): device list, "Register this device", rename and remove. Info card "What is stored": app-generated device ID, optional label, OS name, OS version, app version, last operation time. Info card "What is not collected": CPU, GPU, serial numbers, MAC addresses, disk identifiers, or any other hardware fingerprint.
+• Settings (/settings): Profile, Appearance (Light and Dark cards that apply immediately), Privacy (log retention and data export), Session (Sign out).
+• Authentication (/login, /signup, /forgot-password): PART 4.
+
+Status chips: green for completed or verified, amber for partial, unverified or pending, red for failed or verification failed, grey for cancelled or interrupted, blue for simulation or running.
+
+
+PART 4 - AUTHENTICATION AND SIGNUP (SUPABASE)
+---------------------------------------------
+
+Signup fields (in order)
+1. First name (required, 1 to 60 characters)
+2. Last name (required, 1 to 60 characters)
+3. Email (required, valid format)
+4. Phone number (optional; if entered: starts with +, then 8 to 15 digits, no spaces). Helper text: "Optional. Used for your profile only." Not used for sign-in, no SMS is sent.
+5. Password (minimum 8 characters, at least one letter and one digit, strength indicator)
+6. Confirm password (must match)
+7. "Create account" button
+8. "Continue with Google" button. Enabled only when Supabase Google OAuth is configured. Otherwise disabled with: "Google sign-in is available after Supabase Google login is configured."
+
+Signup sends first name, last name and phone as user metadata (options.data) in the Supabase signUp call. The database trigger in PART 5 creates the profiles row from this metadata. The app does NOT insert the profile itself during signup, so signup works whether or not a session is returned.
+
+After signup
+• If email confirmation is enabled, Supabase returns no session. Show "Check your email to verify your account" with a Resend button (60-second cooldown).
+• If a session is returned, go to the dashboard.
+• After the first successful sign-in, the app calls GET /api/profile. If the profile row is missing (for example, the trigger failed on an older account), the app calls POST /api/profile/ensure, which creates the row from the user's metadata with the user's own token, and shows the result. If that fails, show the error with a Retry button. Never leave a user on a broken dashboard without explanation.
+
+Login: email, password, "Sign in", Google button (same rule), "Forgot password?", link to Sign up. Failure message: "Email or password is incorrect." Never say which field was wrong.
+
+Forgot password: email field, "Send reset link". Always show "If an account exists for this email, a reset link has been sent." Reset page uses the Supabase recovery session to set a new password.
+
+Sessions
+• The Supabase JavaScript client holds the session. Do not write custom token storage.
+• Expired session: redirect to /login with "Your session has expired. Sign in again."
+• Sign out calls Supabase signOut and clears all client state.
+• Backend protected endpoints require "Authorization: Bearer <access token>". The backend verifies the token with Supabase and returns UNAUTHENTICATED for missing or invalid tokens.
+• Never log passwords, tokens, or the Authorization header.
+
+Supabase Auth settings the README must list
+• Email provider enabled. Email confirmation: on or off, documented, both must work.
+• Site URL and redirect URLs for password reset (tauri localhost URLs for development and the production asset origin used by the app).
+• Google provider: optional; documented steps.
+
+
+PART 5 - DATABASE (SUPABASE POSTGRESQL)
+---------------------------------------
+
+Migrations live in supabase/migrations/ as numbered SQL files and must apply in order to an empty project. The README gives the apply steps (SQL editor or Supabase CLI).
+
+5.1 Profile creation trigger (0001_profiles_trigger.sql)
+
+Create the profile from auth metadata so signup never depends on a session:
+
+create table public.profiles (
+id uuid primary key references auth.users(id) on delete cascade,
+first_name text not null check (char_length(first_name) between 1 and 60),
+last_name text not null check (char_length(last_name) between 1 and 60),
+phone text null check (phone is null or phone ~ '^\+[0-9]{8,15}$'),
+email text not null,
+preferences jsonb not null default '{}'::jsonb,
+created_at timestamptz not null default now(),
+updated_at timestamptz not null default now()
+);
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+insert into public.profiles (id, first_name, last_name, phone, email)
+values (
+new.id,
+coalesce(new.raw_user_meta_data->>'first_name', ''),
+coalesce(new.raw_user_meta_data->>'last_name', ''),
+nullif(new.raw_user_meta_data->>'phone', ''),
+new.email
+)
+on conflict (id) do nothing;
+return new;
+end;
+$$;
+
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+Notes the builder must apply:
+• The function is security definer, so it can insert while RLS is active. Do NOT use FORCE ROW LEVEL SECURITY on profiles.
+• If first name or last name is missing or invalid, the check constraint rejects the insert and signup fails. This is intended: the account is not left without a profile. The frontend validates the same rules first, so this should not happen in normal use.
+• The phone check uses the same format as the frontend and the backend.
+
+5.2 Grants and RLS (0002_rls.sql)
+• Enable row level security on every table in this release.
+• Grants: revoke all on all tables in schema public from anon. Grant select, insert, update, delete to authenticated only where the policies below allow it. Do not grant anything to anon.
+• profiles: select and update where id = auth.uid(). Insert allowed for authenticated where id = auth.uid(), used only by the repair path POST /api/profile/ensure. No delete policy (profile deletion comes with account deletion in a later release).
+• devices, operations, operation_events, reports, audit_log: select, insert, update, delete where user_id = auth.uid(). Except audit_log: select and insert only, no update and no delete policy.
+• Every insert policy also checks user_id = auth.uid() in the with check clause.
+• Write supabase/tests/rls_test.sql that creates two test users, proves each can read only their own rows, proves user B cannot update or delete user A's rows, and proves audit_log rows cannot be updated or deleted.
+
+5.3 Tables (0003_tables.sql)
+
+devices
+id uuid primary key default gen_random_uuid()
+user_id uuid not null references auth.users(id) on delete cascade
+app_device_id uuid not null (generated by the app on first run, stored in app data)
+label text null check (char_length(label) <= 60)
+os_name text null
+os_version text null
+app_version text not null
+last_seen_at timestamptz not null default now()
+unique (user_id, app_device_id)
+
+No other device fields. No CPU, GPU, serial number, MAC, disk ID, or hardware fingerprint is stored.
+
+operations
+id uuid primary key default gen_random_uuid()
+user_id uuid not null references auth.users(id) on delete cascade
+operation_type text not null check (operation_type in ('ERASURE_SIMULATION', 'RECOVERY_TEST'))
+mode text not null check (mode in ('SIMULATION_ONLY', 'TEST_IMAGE'))
+target_reference text not null
+method text not null
+execution_status text not null check (execution_status in ('SIMULATION_COMPLETED', 'RECOVERY_COMPLETED', 'EXECUTION_FAILED', 'PARTIALLY_COMPLETED', 'CANCELLED', 'INTERRUPTED', 'RUNNING'))
+verification_status text not null check (verification_status in ('SIMULATION_CHECK_PASSED', 'SIMULATION_CHECK_FAILED', 'VERIFIED', 'VERIFICATION_FAILED', 'UNVERIFIED', 'NOT_APPLICABLE'))
+check ((operation_type = 'ERASURE_SIMULATION') = (mode = 'SIMULATION_ONLY'))
+idempotency_key text not null
+created_at timestamptz not null default now()
+completed_at timestamptz null
+unique (user_id, idempotency_key)
+
+A simulation can only have a SIMULATION_* verification value. A VERIFIED value can only come from a recovery output check in this release.
+
+operation_events
+id uuid primary key default gen_random_uuid()
+user_id uuid not null references auth.users(id) on delete cascade
+operation_id uuid not null references operations(id) on delete cascade
+event_type text not null
+occurred_at timestamptz not null default now()
+safe_details jsonb not null default '{}'::jsonb (never file contents, never secrets)
+
+reports
+id uuid primary key default gen_random_uuid()
+user_id uuid not null references auth.users(id) on delete cascade
+operation_id uuid not null references operations(id) on delete cascade
+report_status text not null check (report_status in ('COMPLETE', 'INCOMPLETE'))
+report_json jsonb not null
+report_sha256 text not null
+created_at timestamptz not null default now()
+
+audit_log
+id bigint generated always as identity primary key
+user_id uuid not null references auth.users(id) on delete cascade
+action text not null
+operation_id uuid null
+previous_hash text not null
+entry_hash text not null
+created_at timestamptz not null default now()
+
+Phase 2 adds recovery_scans and recovery_candidates (PART 6.4).
+
+5.4 Audit chain
+• entry_hash = SHA-256 over (previous_hash || canonical JSON of the entry without hash fields). Canonical JSON: sorted keys, no extra whitespace, UTF-8.
+• First entry for a user uses previous_hash = "GENESIS".
+• The backend computes the hash; the database stores it. The chain is per user.
+• "Verify audit chain" recomputes every hash for the current user and reports "Chain intact" or the first broken entry id.
+
+5.5 Privacy preferences (stored in profiles.preferences)
+• theme: "light" or "dark".
+• keep_logs_days: 30, 90 or 365. The backend deletes operation_events older than this value for the current user when the setting is saved and at most once per hour when the dashboard loads.
+• export_requested_at: timestamp or null.
+• Data export (POST /api/privacy/export) builds a JSON file of the user's profile, devices, operations, events, reports and audit entries. It contains no file contents, because none are stored.
+• Account deletion is NOT part of this release.
+
+
+PART 6 - BACKEND (FASTAPI, LOCAL SIDECAR)
+-----------------------------------------
+
+Listens only on 127.0.0.1:8765. Never 0.0.0.0. CORS allows only the Tauri webview origins and http://localhost:1420 (development).
+
+Startup
+• Reads SUPABASE_URL and SUPABASE_ANON_KEY from environment variables passed by the Tauri shell (PART 7). If either is missing, the backend starts in CONFIG_MISSING mode: /api/health reports it, and every protected endpoint returns SUPABASE_NOT_CONFIGURED.
+• Reads CIPHER_APP_DATA. Creates it if missing. Writes the log file there (cipher-backend.log, no secrets, no tokens, no file contents).
+• Creates the device identity on first run: a random UUID stored in app data as device.json. This is the app_device_id.
+
+Project layout
+backend/
+requirements.txt
+cipher_backend_entry.py calls uvicorn with host 127.0.0.1 and port 8765 only; no host argument accepted
+cipher_backend/
+__init__.py
+main.py app factory, startup, shutdown, /api/health
+config.py settings and paths
+logging_setup.py file log, redaction filter
+auth.py token verification, current-user dependency
+supabase_client.py PostgREST calls using the user's access token
+schemas.py Pydantic models and the response envelope
+errors.py error codes and exception handlers
+audit.py hash-chained audit entries
+simulation.py Phase 1 simulation (read and hash only)
+workspace.py managed workspace (inside app data)
+carving.py Phase 2
+classifier.py Phase 2
+recovery.py Phase 2
+reports.py JSON and PDF (reportlab)
+routers/
+config.py, profile.py, dashboard.py, devices.py, operations.py,
+verification.py, reports.py, audit.py, privacy.py, erasure.py, recovery.py
+tests/
+scripts/
+smoke_test.py
+train_classifier.py Phase 2
+
+Response envelope (every endpoint)
+{
+"data": null,
+"error": { "code": "...", "message": "...", "retryable": false, "details": {} },
+"meta": { "request_id": "..." }
+}
+Error codes: UNAUTHENTICATED, SUPABASE_NOT_CONFIGURED, SUPABASE_UNAVAILABLE, VALIDATION_FAILED, NOT_FOUND, CONFLICT, SIMULATION_TARGET_NOT_ALLOWED, RECOVERY_SOURCE_NOT_ALLOWED, OUTPUT_NOT_ALLOWED, CLASSIFIER_UNAVAILABLE, INTERNAL_ERROR. Stack traces go only to the log file.
+
+6.1 Endpoints, Phase 0 and 1
+GET /api/health version, mode (OK or CONFIG_MISSING), no secrets
+GET /api/config public: supabase_url, supabase_anon_key, auth_flags (google_enabled), feature flags, classifier status
+GET /api/profile current profile
+POST /api/profile/ensure create the profile row from user metadata if missing; idempotent
+PUT /api/profile update first name, last name, phone, preferences
+GET /api/dashboard/summary counts from the database; simulation checks counted separately
+GET /api/devices
+POST /api/devices register this device (uses the app_device_id from device.json)
+PUT /api/devices/{id} rename only
+DELETE /api/devices/{id}
+POST /api/erasure/simulate/workspace create or refresh the managed workspace
+GET /api/erasure/simulate/targets workspace files with sizes and SHA-256
+POST /api/erasure/simulate/plan validate selected targets, return summary
+POST /api/erasure/simulate/run requires confirmation "SIMULATE" and an Idempotency-Key header
+GET /api/operations paginated
+GET /api/operations/{id} detail with events and checks
+POST /api/operations/{id}/verify re-runs checks, never changes execution status
+GET /api/reports
+GET /api/reports/{id}/export?format=pdf|json
+GET /api/audit
+GET /api/audit/verify-chain
+POST /api/privacy/export
+
+6.2 Simulation rules (simulation.py, tested)
+• Targets must be inside the managed workspace folder. Anything else returns SIMULATION_TARGET_NOT_ALLOWED.
+• The run hashes each target before and after the simulation. It never opens a target for writing.
+• A test asserts that no workspace file's bytes, size or modified time change during a simulation run.
+• verification_status = SIMULATION_CHECK_PASSED when every target's before and after hashes match. Otherwise SIMULATION_CHECK_FAILED.
+• execution_status = SIMULATION_COMPLETED when the run finished. INTERRUPTED if it stopped early.
+• Report text follows PART 2.1 exactly.
+
+6.3 Verification action
+• "Re-verify" on a simulation re-hashes the same targets and compares them with the stored hashes. It writes a new event and updates verification_status only. It never changes execution_status.
+
+6.4 Phase 2 endpoints and rules
+POST /api/recovery/test-image create a ground-truth test image inside app data
+POST /api/recovery/scan start a carving job (returns job id)
+GET /api/jobs/{id} status and progress
+GET /api/recovery/scans/{id}
+GET /api/recovery/scans/{id}/candidates?type=&state=
+GET /api/recovery/candidates/{id} checks, hex header, confidence components
+POST /api/recovery/recover write selected candidates to the recovered folder, then re-validate
+
+Phase 2 tables: recovery_scans (id, user_id, source_reference, status, created_at, completed_at) and recovery_candidates (id, user_id, scan_id, file_type, byte_offset, estimated_size, state, confidence, classifier_label, validation_checks jsonb, sha256). State values: DETECTED, VALIDATED, RECOVERED, VALIDATION_FAILED, WRITE_FAILED, PARTIAL.
+
+Carving rules
+• Source: only the test image in the app-data test folder. Output: only the recovered folder in app data. The backend refuses any output folder equal to or inside the source folder.
+• Read in 4 MiB chunks with a 64-byte overlap. Open read-only.
+• Signatures: JPEG (FF D8 FF, footer FF D9, marker structure check), PNG (89 50 4E 47 0D 0A 1A 0A, IEND, CRC-32 per chunk), PDF (%PDF- to %%EOF, object and trailer check), ZIP (PK 03 04, EOCD PK 05 06 check), GIF (GIF87a or GIF89a, trailer 3B, screen descriptor check). Plain text is listed as not signature-carvable.
+• Maximum candidate size 64 MiB (configurable). A JPEG or PNG with no footer inside the limit is marked PARTIAL.
+• Confidence, rule-based, 0 to 100: header found +30, footer found +30, all structure checks passed +30, written output re-parsed successfully +10. The components are shown in the detail view.
+• Classifier: scikit-learn RandomForestClassifier trained by scripts/train_classifier.py on generated fixtures (byte histogram, entropy, length, header and footer flags). Store the model with a version and a feature schema version. If the model is missing, return CLASSIFIER_UNAVAILABLE for classification only; carving still runs. Never describe output as a probability of recovery. Report precision, recall and F1 from its held-out split, with the note that these come from generated fixtures only.
+• RECOVERED only after the output file is read back, its SHA-256 is recorded, its structure check passes again, and for images Pillow verify() passes.
+• Collision policy: never overwrite. Use name_1, name_2, and so on.
+
+
+PART 7 - LAYOUT, TAURI CONFIGURATION AND WINDOWS .EXE PACKAGING
+---------------------------------------------------------------
+
+7.1 Folder layout (exact)
+
+cipher-labs/
+README.md
+.gitignore
+.env.example documents variable names only, no values
+supabase/
+migrations/0001_profiles_trigger.sql
+migrations/0002_rls.sql
+migrations/0003_tables.sql
+tests/rls_test.sql
+backend/ see PART 6
+scripts/
+check_env.ps1 Phase 0 environment check (PART 10)
+build_backend.ps1 builds the sidecar and copies it into the Tauri project
+build_all.ps1 runs the whole release build in order
+frontend/ ONE package root for the desktop app
+package.json scripts: dev, build, test, tauri
+vite.config.ts
+tsconfig.json
+index.html
+tailwind.config.js
+postcss.config.js
+src/ React code (PART 3 and PART 4)
+src/__tests__/
+src-tauri/ the Tauri project lives here, next to package.json
+Cargo.toml
+build.rs
+tauri.conf.json
+capabilities/default.json
+binaries/ sidecar copy goes here (git-ignored)
+icons/ generated with the Tauri icon command
+src/main.rs
+
+Rule: every build command runs from frontend/ (npm scripts). Do not run cargo or tauri from any other folder.
+
+7.2 frontend/package.json scripts (exact names)
+"dev": "vite"
+"build": "tsc --noEmit && vite build"
+"test": "vitest run"
+"tauri": "tauri"
+Dependencies include @tauri-apps/api v2 and @tauri-apps/cli v2 (dev). The Tauri CLI is run as npm run tauri -- <command>.
+
+7.3 frontend/vite.config.ts (exact behaviour)
+• server.port = 1420 and server.strictPort = true (Tauri expects this port).
+• build.outDir = "dist" (relative to frontend/). This is the folder Tauri reads.
+• build.emptyOutDir = true.
+• base = "./" so the built assets resolve relative to the app.
+
+7.4 frontend/src-tauri/tauri.conf.json (exact keys)
+"productName": "Cipher Labs"
+"version": "1.0.0"
+"identifier": "com.cipherlabs.desktop"
+"build": {
+"beforeDevCommand": "npm run dev",
+"devUrl": "http://localhost:1420",
+"beforeBuildCommand": "npm run build",
+"frontendDist": "../dist"
+}
+"app": {
+"windows": [{ "title": "Cipher Labs", "width": 1280, "height": 800, "minWidth": 1100, "minHeight": 720 }],
+"security": { "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8765 https://*.supabase.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'" }
+}
+"bundle": {
+"active": true,
+"targets": ["nsis"],
+"externalBin": ["binaries/cipher-backend"],
+"icon": ["icons/icon.ico"],
+"windows": { "webviewInstallMode": { "type": "downloadBootstrapper" }, "nsis": { "installMode": "currentUser" } }
+}
+
+Notes for the builder
+• frontendDist "../dist" is relative to frontend/src-tauri/, so it resolves to frontend/dist. This matches vite.config.ts.
+• beforeBuildCommand and beforeDevCommand run through npm in frontend/, where package.json is.
+• The connect-src entry for the Supabase host must match the project URL in use. If the project uses a custom domain, add it. The README documents this.
+• The builder must confirm these keys against the Tauri v2 schema for the installed CLI version, and report any key that the CLI rejects.
+
+7.5 frontend/src-tauri/Cargo.toml (dependencies)
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde_json = "1"
+(Use the versions the CLI scaffolds, and report them.)
+
+7.6 frontend/src-tauri/src/main.rs (sidecar launch, the required shape)
+
+The sidecar is started from Rust with the shell plugin's spawn API. The shell plugin is initialised explicitly. The capability in 7.7 grants shell:allow-spawn for this sidecar only.
+
+use std::sync::Mutex;
+use std::time::Duration;
+use tauri::{Manager, RunEvent};
+use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
+
+struct Backend(Mutex<Option<CommandChild>>);
+
+// Compile-time values, read from the environment at build time by scripts/build_backend.ps1.
+// If unset, the backend starts in CONFIG_MISSING mode.
+const SUPABASE_URL: Option<&str> = option_env!("CIPHER_SUPABASE_URL");
+const SUPABASE_ANON_KEY: Option<&str> = option_env!("CIPHER_SUPABASE_ANON_KEY");
+
+fn main() {
+tauri::Builder::default()
+.plugin(tauri_plugin_shell::init())
+.manage(Backend(Mutex::new(None)))
+.setup(|app| {
+let data_dir = app.path().app_data_dir()?;
+std::fs::create_dir_all(&data_dir)?;
+let mut cmd = app
+.shell()
+.sidecar("cipher-backend")?
+.env("CIPHER_APP_DATA", data_dir.to_string_lossy().to_string());
+if let (Some(url), Some(key)) = (SUPABASE_URL, SUPABASE_ANON_KEY) {
+cmd = cmd.env("SUPABASE_URL", url).env("SUPABASE_ANON_KEY", key);
+}
+let (mut rx, child) = cmd.spawn()?;
+*app.state::<Backend>().0.lock().unwrap() = Some(child);
+
+// Forward sidecar output to the Tauri log. Do not print secrets.
+tauri::async_runtime::spawn(async move {
+while let Some(event) = rx.recv().await {
+if let CommandEvent::Stdout(line) | CommandEvent::Stderr(line) = event {
+log::info!("backend: {}", String::from_utf8_lossy(&line));
+}
+}
+});
+
+// Wait for /api/health (up to 15 s). If it fails, show an error and exit.
+// Implement with a blocking HTTP GET to http://127.0.0.1:8765/api/health every 250 ms.
+// On failure, show a dialog "The Cipher Labs service could not start. Check the log at {log path}." and exit.
+Ok(())
+})
+.build(tauri::generate_context!())
+.expect("error while building Cipher Labs")
+.run(|app, event| {
+if let RunEvent::Exit = event {
+if let Some(child) = app.state::<Backend>().0.lock().unwrap().take() {
+let _ = child.kill();
+}
+}
+});
+}
+
+Notes for the builder
+• The health wait needs an HTTP client. Add the minimal crate the builder chooses (for example ureq) and list it in Cargo.toml. Do not add a shell permission for it; the request is made by Rust, not the webview.
+• Logging crate: use the log crate with tauri's logging if the scaffold provides it, or drop the log lines. Do not print secret values anywhere.
+• Environment variables are compile-time values from build_backend.ps1. The anon key is a public value, but it is still never printed or logged.
+• The builder confirms each API name (sidecar, spawn, env, kill, CommandEvent variants) against the Tauri v2 docs for the installed version, and reports any change.
+
+7.7 frontend/src-tauri/capabilities/default.json
+
+{
+"$schema": "../gen/schemas/desktop-schema.json",
+"identifier": "default",
+"description": "Window and core access for Cipher Labs; sidecar spawn for the backend only.",
+"windows": ["main"],
+"permissions": [
+"core:default",
+{
+"identifier": "shell:allow-spawn",
+"allow": [{ "name": "binaries/cipher-backend", "sidecar": true, "args": false }]
+}
+]
+}
+
+Rules
+• No shell:allow-execute, no shell:default, no broad fs or shell permissions.
+• args false means no arguments can be passed from the webview. The Rust side passes only the env values above.
+• The builder checks the schema path against the installed CLI and reports any mismatch.
+
+7.8 Sidecar copy path (scripts/build_backend.ps1)
+• Build the executable with PyInstaller from backend/.venv: one file, no console window, hidden imports listed for uvicorn, scikit-learn and reportlab, and the classifier model file added as data (Phase 2).
+• Copy dist\cipher-backend.exe to:
+frontend\src-tauri\binaries\cipher-backend-x86_64-pc-windows-msvc.exe
+The target triple suffix is required by Tauri for sidecars. The builder confirms the triple with rustc -vV on the build machine and reports it.
+• The script exports CIPHER_SUPABASE_URL and CIPHER_SUPABASE_ANON_KEY from an untracked file frontend\src-tauri\config\supabase.env before cargo build runs. The file format is documented in .env.example, which holds names only.
+
+7.9 Build sequence (PowerShell, from the repository root)
+1. powershell -ExecutionPolicy Bypass -File scripts\check_env.ps1
+2. cd backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cd ..
+3. powershell -ExecutionPolicy Bypass -File scripts\build_backend.ps1
+4. cd frontend
+npm install
+npm test
+npm run build
+npm run tauri build
+5. The installer is printed by the Tauri build. The expected folder is frontend\src-tauri\target\release\bundle\nsis\
+
+scripts\build_all.ps1 runs steps 1 to 4 in order and stops at the first failure.
+
+7.10 Development run (PowerShell)
+cd backend; .\.venv\Scripts\Activate.ps1; python cipher_backend_entry.py
+In a second terminal: cd frontend; npm run tauri dev
+(In development the Rust side starts the sidecar from the built binary. The README states that the sidecar must be built at least once with build_backend.ps1 for tauri dev to start the backend.)
+
+7.11 Installer requirements
+• NSIS, per-user install (no administrator rights).
+• WebView2 bootstrapper for machines without WebView2.
+• Start menu entry and uninstaller.
+• User data lives in %APPDATA%\com.cipherlabs.desktop (the Tauri app data directory, passed to the backend as CIPHER_APP_DATA). Uninstall does not delete it, and the README says so.
+• The installer is unsigned. Windows SmartScreen may warn. Code signing is a later step.
+
+7.12 Clean-machine test (manual, in the README)
+1. Clean Windows 11 VM. Install the NSIS file. Start the app. The backend starts and the sign-in page loads.
+2. Sign up with a new account including a phone number. Confirm the profiles row exists in Supabase, created by the trigger, without the app inserting it.
+3. Run a simulation. Confirm the verification chip reads "Simulation check passed" and no workspace file changed.
+4. Close the app. Confirm in Task Manager that cipher-backend.exe has stopped.
+5. Start a second process that holds port 8765, then start the app. Confirm the error dialog.
+6. Uninstall. Confirm the data folder remains.
+7. Start with the Supabase configuration left out. Confirm the app shows the configuration message and does not crash.
+
+
+PART 8 - OFFLINE PENDING-SYNC QUEUE (PHASE 3)
+---------------------------------------------
+
+Decision
+• Supabase is the permanent source of truth.
+• The offline queue is a temporary holding list of records that could not be written yet. It is not a database and holds no user files.
+• The queue is a JSON file in app data, written atomically (write to a temporary file, then rename).
+
+What the queue may contain
+• Operation metadata and report metadata only: operation_type, mode, target_reference, method, statuses, timestamps, idempotency_key, report_sha256 and the report JSON.
+• It never contains file contents, tokens, passwords, or the Supabase keys.
+
+Entry format
+{ "queue_id": "uuid", "record_type": "operation|report", "idempotency_key": "...",
+"payload": { ... }, "created_at": "...", "attempts": 0, "last_error_code": null,
+"mac": "hex HMAC-SHA256 of the entry" }
+The HMAC key is random, created on first run, and stored in app data as queue.key. The HMAC detects accidental corruption and casual editing of the queue file. It does not stop a determined person with full access to the user's account, and the README states this limit.
+
+Sync rules
+• Sync runs at startup and every 60 seconds while signed in and online, with bounded exponential backoff after failures (1, 2, 4, up to 5 minutes).
+• Each entry is sent with its idempotency_key. The server enforces unique (user_id, idempotency_key), so a repeated send does not create a duplicate.
+• An entry is removed from the queue only after a success response, or after a conflict response that confirms the same record already exists.
+• A failed entry stays in the queue, with attempts incremented and last_error_code set.
+• An entry whose MAC does not match is moved to queue.rejected.json and shown to the user as "Pending record could not be verified and was not synced." It is never sent.
+• The status shown is "Synchronization pending" when entries exist, and "Synchronization failed" after repeated failures with the last error code.
+
+Tests (Phase 3)
+• Restart during a pending sync: the entry is sent once after restart and not duplicated.
+• Network failure during sync: the entry stays queued and is sent later.
+• Successful sync removes the entry from the queue.
+• A tampered entry is rejected and never sent.
+• Sending the same entry twice leaves one record in Supabase.
+• A write to the queue file that is interrupted leaves the previous valid queue intact.
+
+
+PART 9 - RULES FOR THIS RELEASE (REPEATED FOR EMPHASIS)
+-------------------------------------------------------
+
+• No code path writes to, deletes, or overwrites any file outside the app-data folder.
+• No code path reads a drive, partition, or raw device.
+• No raw device or disk-wipe code, not even behind a flag.
+• No SQLite or other local database for user records.
+• No service-role key anywhere in the app, the sidecar, the installer, or the repository.
+• Simulation results never use the words Verified, Erased, Sanitized, or Destroyed (PART 2.1).
+• Device records store only the fields in PART 5.3. No CPU, GPU, serial, MAC, disk or other hardware data.
+• Pages that belong to a later phase show "Available in a later release" with no action buttons.
+• No fabricated metrics, fake progress, or success without a backend result.
+• Dark and light themes work on every screen. Reduced motion is respected.
+
+
+PART 10 - PHASE 0 ENVIRONMENT CHECK (scripts/check_env.ps1)
+-----------------------------------------------------------
+
+The script checks and reports PASS or FAIL for each item. On FAIL it prints the install step and exits with a non-zero code. It never continues past a failure silently.
+
+Tool checks
+• Windows 10 21H2+ or Windows 11, 64-bit (report the build number)
+• Node.js 20 or later, and npm
+• Python 3.11 (py -3.11 --version)
+• Rust stable: rustc and cargo, plus the host triple from rustc -vV (must be x86_64-pc-windows-msvc)
+• Microsoft WebView2 Runtime (registry check)
+• Visual Studio Build Tools with the C++ workload (vswhere check)
+• Tauri CLI version from frontend's node_modules, if installed (report it; install step if missing)
+• Git
+
+Supabase configuration checks (no values are printed)
+• frontend\src-tauri\config\supabase.env exists.
+• CIPHER_SUPABASE_URL is present, starts with https://, and has no trailing spaces. Print only "present" and "format OK".
+• CIPHER_SUPABASE_ANON_KEY is present and has the three-segment token shape (two dots). Print only "present" and "format OK".
+• Reachability: one request to the project's /auth/v1/health endpoint with the anon key header. Print the HTTP status code only. Pass on 200.
+• Print "Supabase configuration: OK" or the specific item that failed. Never print the URL's key, the anon key, or any token.
+
+Gate
+• Every tool check passes on the build machine.
+• The Supabase checks pass with a real project, or the phase report says they were not run.
+
+
+PART 11 - PHASE PLAN (ONE PHASE PER SESSION)
+--------------------------------------------
+
+PHASE 0 - Environment, layout and scaffold
+
+Build
+• scripts/check_env.ps1 (PART 10).
+• The full folder layout in PART 7.1, including frontend/src-tauri created by the Tauri scaffold and then edited to match PART 7.4 to 7.7.
+• Minimal frontend: sidebar with the seven items and "Cipher Labs" header. It calls GET /api/health through the backend.
+• Minimal backend: /api/health and /api/config, with the envelope and the CONFIG_MISSING mode.
+• Tauri shell with the sidecar spawn from 7.6 and the capability from 7.7.
+• build_backend.ps1 producing the sidecar file in frontend/src-tauri/binaries/.
+
+Gate
+• check_env.ps1 passes.
+• npm run build (in frontend/) succeeds.
+• Backend starts on 127.0.0.1:8765 and /api/health returns the envelope.
+• npm run tauri dev opens a window, the sidecar starts, and the window shows the backend status as OK.
+• npm run tauri build produces an NSIS installer in frontend\src-tauri\target\release\bundle\nsis\, OR the report lists the exact error.
+• The builder reports the Tauri, Rust, and CLI versions it used, and any schema key it had to change.
+
+PHASE 1 - Authentication, Supabase data, dashboard, simulated erasure
+
+Build
+• Migrations 0001 to 0003 (PART 5), the RLS test script, and the Supabase Auth settings documented in PART 4.
+• Sidebar, top bar, the seven pages and their Phase 1 states (PART 3).
+• Signup, login, forgot-password and reset pages (PART 4), including the phone field and the profile-ensure repair path.
+• Profile and Settings (PART 5.5), including the preferences that the backend reads.
+• Dashboard with real counts and the simulation line from PART 3.
+• Devices page with the fields from PART 5.3 and the "What is not collected" card.
+• Simulation: workspace creation, target list with hashes, the wizard (Targets, Confirm by typing SIMULATE, Run with progress), operation record, report.
+• Verification Center with Re-verify. Labels follow PART 2.1.
+• Reports & Audit with PDF and JSON export and "Verify audit chain".
+• File Recovery page shows only "File recovery is available in a later release."
+
+Tests
+• Backend pytest: simulation refuses paths outside the workspace; simulation does not change any workspace file's bytes, size or modified time; simulation labels are the PART 2.1 values; audit chain breaks when an entry is altered; unauthenticated requests are rejected; phone validation matches the database check; profile ensure is idempotent.
+• supabase/tests/rls_test.sql: user B cannot read or change user A's rows; audit_log rows cannot be updated or deleted; the signup trigger creates exactly one profile per user.
+• Signup test with email confirmation on and with it off: the profile row exists in both cases without the app inserting it.
+• Frontend Vitest: seven sidebar items in order; the run button stays disabled until SIMULATE is typed; the dashboard shows "Unavailable" on API failure; the simulation line is present; dark mode persists.
+• scripts/smoke_test.py: sign up, create workspace, run simulation, re-verify, export PDF and JSON, verify audit chain.
+
+Gate
+• All tests pass and their output is reported.
+• Signup, login, and password reset tested against a real Supabase project, with results reported.
+
+PHASE 2 - Test disk images, signature scanning, validated recovery
+
+Build
+• workspace.py test image generator (ground truth stored for scoring only; the carving code must not read it).
+• carving.py, recovery.py, classifier.py, scripts/train_classifier.py (PART 6.4).
+• Recovery Lab UI: create test image, start scan with live progress from /api/jobs/{id}, candidate table with filters, detail view with hex header and checks, recovery into the recovered folder, and results with per-state counts plus precision and recall against ground truth.
+• Recovery operations appear in the dashboard, Verification Center and Reports, labelled TEST IMAGE.
+
+Tests
+• Generated image yields the expected JPEG, PNG, PDF, ZIP and GIF candidates with the expected checks passing.
+• PNG with a corrupted chunk CRC is rejected.
+• Truncated JPEG is marked PARTIAL.
+• Recovered files are byte-identical to the ground truth originals.
+• Recovery never writes into the source folder (asserted).
+• Classifier loads with its version and returns a label; no output contains "probability of recovery".
+• With the classifier file removed: carving still works and the UI shows the classifier as unavailable.
+
+Gate
+• All tests pass. Scores are reported with the note that they come from generated fixtures only.
+
+PHASE 3 - Packaging, offline queue, release hardening
+
+Build
+• PART 7 in full: sidecar build, Tauri configuration, capabilities, Rust launch and health wait, error dialog, shutdown on exit, NSIS installer.
+• PART 8 offline pending-sync queue with HMAC protection and idempotent sync, and the status labels.
+• Error review: every endpoint returns a stable code; the log file records internal errors without secrets.
+• README: build steps, output path, Supabase setup, manual clean-machine checklist (7.12), known limits.
+
+Tests
+• Backend unit tests pass in the built sidecar (the frozen executable runs the test or smoke entry).
+• Queue tests in PART 8.
+• Installer built and installed on a clean Windows VM, with each step of 7.12 reported.
+• Port-busy, backend-missing and Supabase-not-configured scenarios each produce the correct message.
+
+Gate
+• The installer file is produced and its path reported.
+• Manual checklist results are reported. Any step not run is marked NOT RUN, with a reason.
+
+LATER RELEASE - NOT IN THIS PROMPT
+• Real file erasure of user data.
+• Scanning of internal or attached drives.
+• Raw device or disk erasure.
+Each requires its own design review, its own safety tests, and an explicit decision before any code is written.
+
+
+PART 12 - OUTPUT FORMAT FOR EACH PHASE
+--------------------------------------
+
+Your final response for a phase must contain, in this order:
+1. Phase number and gate status (passed, partly passed, or not passed), with the reason.
+2. The file tree changed in this phase.
+3. The full contents of every file created or changed, each under a heading with its path. Nothing may be shortened, replaced with "...", or described instead of written.
+4. Exact commands, run from the folders named in PART 7.9 and 7.10, for Windows PowerShell.
+5. The actual output of the tests and the smoke test. Do not say a test passed unless it ran.
+6. Versions used: Node, npm, Python, Rust, Tauri CLI, Tauri crates and plugins.
+7. Manual checks the user must run, as a numbered list.
+8. Known limitations, and anything not run in this environment, with the exact error.
+
+Do not start the next phase in the same response.
+
+
+PART 13 - FINAL REMINDER
+------------------------
+
+Cipher Labs is a Windows desktop application. In this release it shows the secure erasure workflow as a simulation with real checks and reports, and performs file recovery only on test images the app creates. It does not touch the user's files or drives. A passing build is not a working installer, and a working installer is not a release until it passes the clean-machine test in 7.12.
+
+Cipher Labs - Secure. Recover. Verify.
+PART 14 — FINAL IMPLEMENTATION AUDIT (MANDATORY)
+Before declaring any phase complete, check and implement the following:
+1.	Supabase key compatibility: Accept both legacy JWT-style anon keys and modern sb_publishable_ keys. Never print key values. Do not require the publishable key to have exactly three JWT segments.
+2.	Desktop authentication callbacks: Implement and test the full Supabase OAuth and password-reset return flow for the installed Tauri application. Configure the required Tauri deep-link handling and Supabase redirect allowlist. Never enable Google sign-in unless the actual desktop callback flow works end to end.
+3.	Signup metadata: Handle email-provider and Google-provider metadata when creating profiles. Support appropriate name-field fallbacks or a profile-completion flow. Test signup with email confirmation enabled and disabled, and with Google metadata.
+4.	Audit integrity: Prevent arbitrary direct inserts into the audit log. Enforce validated append-only audit creation and server/database-side hash computation. Make concurrent audit writes safe and test rejected or modified entries.
+5.	Database-enforced status rules: Add SQL check constraints ensuring simulation operations can only have simulation-specific verification statuses. Add report idempotency constraints so repeated offline synchronization cannot create duplicate reports.
+6.	Fresh-machine bootstrap: Ensure the documented install/build order works from a fresh clone without node_modules or a pre-existing sidecar. Support deliberate CONFIG_MISSING mode for development tests, while clearly refusing to claim authenticated functionality when Supabase is unconfigured.
+7.	Sidecar lifecycle: Implement complete startup health polling, timeout handling, user-visible failure reporting, process termination on startup failure and application exit, and port-conflict tests. Do not leave these behaviours as comments or TODOs.
+8.	Build proof: Use the installed Tauri v2 schema and API signatures. Run the actual frontend build, backend tests, smoke tests, Tauri build and installer tests that the current phase requires. Record each result as PASS, FAIL or NOT RUN, with evidence. Never claim a working installer from a frontend build alone.
+9.	Tool workflow: Use IBM Bob for targeted root-cause analysis and error fixes, and Antigravity for integration, end-to-end checks and regression testing. Do not rewrite unrelated working components while fixing a phase.
+Do not change the locked Windows-only architecture, Supabase-only user database, visual identity, or simulation-first safety boundary. Do not introduce real file erasure, internal-drive scanning or raw-device access into this release.

@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Window and core access for Cipher Labs, deep linking, and sidecar spawn for backend only.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "deep-link:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/cipher-backend",
+          "sidecar": true,
+          "args": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[package]
+name = "cipher-labs-desktop"
+version = "1.0.0"
+description = "Cipher Labs - Digital Forensics and Data Sanitization"
+authors = ["Cipher Labs Team"]
+edition = "2021"
+rust-version = "1.90.0"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-deep-link = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ureq = { version = "2.9", features = ["json"] }
+log = "0.4"
+env_logger = "0.10"

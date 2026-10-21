@@ -1,0 +1,6 @@
+{
+  "name": "Cipher Labs",
+  "description": "Cipher Labs - Digital Forensics and Data Sanitization. SECURE. RECOVER. VERIFY.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
