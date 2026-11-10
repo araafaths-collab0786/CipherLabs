@@ -4,14 +4,19 @@ Enforces collection indexes, idempotency constraints, and connection pooling.
 """
 
 import logging
-from typing import Optional
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from typing import Optional, Any
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+except ImportError:
+    AsyncIOMotorClient = None
+    AsyncIOMotorDatabase = None
+
 from .config import MONGODB_URI, MONGODB_DB_NAME
 
 logger = logging.getLogger("cipher_backend.db")
 
-_client: Optional[AsyncIOMotorClient] = None
-_db: Optional[AsyncIOMotorDatabase] = None
+_client: Optional[Any] = None
+_db: Optional[Any] = None
 
 async def init_db() -> Optional[AsyncIOMotorDatabase]:
     global _client, _db

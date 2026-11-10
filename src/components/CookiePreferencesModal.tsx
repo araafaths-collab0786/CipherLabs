@@ -101,7 +101,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <div
-        className={`w-full max-w-xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
+        className={`w-full max-w-xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden modal-transition ${
           isDark ? 'bg-[#0B1F3A] border-[#1E3A5F] text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
       >

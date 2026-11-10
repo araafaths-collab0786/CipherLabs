@@ -208,65 +208,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       </form>
 
-      {/* Section 2: Appearance (PART 3) */}
-      <div
-        className={`p-6 rounded-2xl border space-y-4 shadow-sm ${
-          isDark ? 'bg-[#122A4D] border-[#1E3A5F]' : 'bg-white border-slate-200'
-        }`}
-      >
-        <div className="flex items-center space-x-2 text-inherit pb-3 border-b border-inherit">
-          <Palette className="w-5 h-5 text-cyan-500" />
-          <h3 className="font-bold text-sm uppercase tracking-wider">Appearance Theme</h3>
-        </div>
 
-        <p className="text-xs text-slate-400">
-          Select preferred interface theme. Setting applies immediately and persists in profile preferences.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Light Theme Card */}
-          <div
-            onClick={isDark ? onToggleTheme : undefined}
-            className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
-              !isDark
-                ? 'border-cyan-500 bg-cyan-50/50 shadow-md ring-2 ring-cyan-500/30'
-                : 'border-slate-700 bg-slate-900/40 hover:bg-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-                <Sun className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Light Mist</h4>
-                <p className="text-xs text-slate-500">Daylight high-contrast layout</p>
-              </div>
-            </div>
-            {!isDark && <CheckCircle2 className="w-5 h-5 text-cyan-600" />}
-          </div>
-
-          {/* Dark Theme Card */}
-          <div
-            onClick={!isDark ? onToggleTheme : undefined}
-            className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
-              isDark
-                ? 'border-cyan-500 bg-[#123A55] shadow-md ring-2 ring-cyan-500/30'
-                : 'border-slate-200 bg-white hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-lg bg-slate-800 text-cyan-400 flex items-center justify-center">
-                <Moon className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-slate-100">Deep Navy</h4>
-                <p className="text-xs text-slate-400">Low-light forensic laboratory palette</p>
-              </div>
-            </div>
-            {isDark && <CheckCircle2 className="w-5 h-5 text-cyan-400" />}
-          </div>
-        </div>
-      </div>
 
       {/* Section 3: Privacy & Data Export (PART 5.5) */}
       <div

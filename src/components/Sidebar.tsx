@@ -38,13 +38,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMinimized = false,
 }) => {
   const navItems = [
-    { id: 'dashboard' as NavTab, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'erasure' as NavTab, label: 'Secure Erasure', icon: Eraser },
-    { id: 'recovery' as NavTab, label: 'File Recovery', icon: FileSearch },
-    { id: 'verification' as NavTab, label: 'Verification Center', icon: ShieldCheck },
-    { id: 'reports' as NavTab, label: 'Reports & Audit', icon: FileText },
-    { id: 'devices' as NavTab, label: 'Devices', icon: Laptop },
-    { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
+    { id: 'dashboard' as NavTab, label: 'Dashboard', icon: LayoutDashboard, shortcut: 'Alt+1' },
+    { id: 'erasure' as NavTab, label: 'Secure Erasure', icon: Eraser, shortcut: 'Alt+2' },
+    { id: 'recovery' as NavTab, label: 'File Recovery', icon: FileSearch, shortcut: 'Alt+3' },
+    { id: 'verification' as NavTab, label: 'Verification Center', icon: ShieldCheck, shortcut: 'Alt+4' },
+    { id: 'reports' as NavTab, label: 'Reports & Audit', icon: FileText, shortcut: 'Alt+5' },
+    { id: 'devices' as NavTab, label: 'Devices', icon: Laptop, shortcut: 'Alt+6' },
+    { id: 'settings' as NavTab, label: 'Settings', icon: Settings, shortcut: 'Alt+7' },
   ];
 
   return (
@@ -90,14 +90,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              title={item.label}
+              title={`${item.label} (${item.shortcut})`}
               className={`w-full flex items-center ${
                 isMinimized ? 'justify-center px-0' : 'space-x-3 px-3.5'
-              } py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
+              } py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ease-in-out hover:scale-[1.02] active:scale-[0.98] text-left ${
                 isActive
                   ? isDark
-                    ? 'bg-[#123A55] text-[#67E8F9] font-semibold shadow-sm'
-                    : 'bg-[#E0F7FB] text-[#0E7490] font-semibold shadow-sm'
+                    ? 'bg-[#123A55] text-[#67E8F9] font-semibold shadow-sm ring-1 ring-cyan-500/30'
+                    : 'bg-[#E0F7FB] text-[#0E7490] font-semibold shadow-sm ring-1 ring-cyan-500/30'
                   : isDark
                   ? 'text-slate-400 hover:text-slate-200 hover:bg-[#122A4D]/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -114,7 +114,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : 'text-slate-500'
                 }`}
               />
-              {!isMinimized && <span className="truncate">{item.label}</span>}
+              {!isMinimized && (
+                <>
+                  <span className="truncate flex-1">{item.label}</span>
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-slate-700/40">
+                    {item.shortcut}
+                  </span>
+                </>
+              )}
             </button>
           );
         })}

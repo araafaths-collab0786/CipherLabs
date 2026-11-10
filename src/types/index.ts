@@ -130,6 +130,9 @@ export interface OperationRecord {
   };
   finalReportId?: string;
   finalReportGeneratedAt?: string;
+  totalBytesProcessed?: number;
+  successfulCount?: number;
+  failedCount?: number;
 }
 
 export interface AuditLogEntry {

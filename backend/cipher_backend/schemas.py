@@ -56,6 +56,16 @@ class SimulationRunRequest(BaseModel):
     create_recovery_copy: bool = True
     confirmation: str
 
+class TargetValidateRequest(BaseModel):
+    targets: List[str]
+
+class PermanentDeleteRunRequest(BaseModel):
+    targets: List[str]
+    confirmation_signature: str
+    save_in_recovery: bool = False
+    mode: str = "PERMANENT_DELETION"
+    sanitization_algorithm: Optional[str] = "NIST_800_88_REV1"
+
 class OperationItem(BaseModel):
     id: str
     user_id: str

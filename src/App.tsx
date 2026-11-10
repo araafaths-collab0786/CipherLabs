@@ -18,6 +18,8 @@ import { AuthPage } from './pages/AuthPage';
 import { StorageService } from './services/storage';
 import { logoutGoogle } from './services/firebaseAuth';
 import { CookieConsentBanner, CookiePreferencesModal } from './components/CookiePreferencesModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import {
   AuditLogEntry,
   DeviceRecord,
@@ -55,15 +57,23 @@ export default function App() {
 
   const [activeReportToView, setActiveReportToView] = useState<ReportRecord | null>(null);
   const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
 
-  // Sync theme with HTML root class
+  // Keyboard Navigation Hook
+  const { activeShortcutNotice } = useKeyboardShortcuts({
+    onSelectTab: setCurrentTab,
+    onToggleShortcutsModal: () => setIsShortcutsModalOpen((prev) => !prev),
+    onCloseModal: () => {
+      setIsShortcutsModalOpen(false);
+      setIsCookieModalOpen(false);
+      setActiveReportToView(null);
+    },
+  });
+
+  // Always enforce dark theme on HTML root
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDark]);
+    document.documentElement.classList.add('dark');
+  }, []);
 
   const handleToggleTheme = () => {
     const nextDark = !isDark;
@@ -160,11 +170,12 @@ export default function App() {
           }}
           isMinimized={isSidebarMinimized}
           onToggleMinimize={() => setIsSidebarMinimized((prev) => !prev)}
+          onToggleShortcutsModal={() => setIsShortcutsModalOpen(true)}
         />
 
         {/* Scrollable Page Body */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="max-w-[1200px] mx-auto">
+          <div key={currentTab} className="max-w-[1200px] mx-auto page-transition">
             {currentTab === 'dashboard' && (
               <Dashboard
                 operations={operations}
@@ -246,6 +257,24 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Keyboard Shortcut Active Feedback Toast Notice */}
+      {activeShortcutNotice && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl bg-[#0B1F3A]/95 border border-cyan-500/40 text-white shadow-2xl backdrop-blur-md flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3 font-mono text-xs">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+          <span>Navigated to <strong>{activeShortcutNotice.label}</strong></span>
+          <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-bold">
+            {activeShortcutNotice.keyCombo}
+          </span>
+        </div>
+      )}
+
+      {/* Global Keyboard Shortcuts Modal Guide */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+        isDark={isDark}
+      />
 
       {/* Global Cookie Consent Banner */}
       <CookieConsentBanner

@@ -154,4 +154,105 @@ export class ApiService {
     StorageService.updateProfile(newProfile);
     return { success: true, profile: newProfile };
   }
+
+  static async validateErasureTargets(targetPaths: string[]): Promise<{
+    success: boolean;
+    data?: {
+      targets: Array<{
+        original_path: string;
+        canonical_path: string;
+        name: string;
+        exists: boolean;
+        is_directory: boolean;
+        is_link: boolean;
+        size_bytes: number;
+        file_type: string;
+        is_valid: boolean;
+        rejection_reason?: string | null;
+        contained_files: number;
+        contained_folders: number;
+      }>;
+      summary: {
+        total_targets: number;
+        eligible_targets: number;
+        ineligible_targets: number;
+        total_size_bytes: number;
+        total_files: number;
+        total_folders: number;
+      };
+    };
+    error?: string;
+  }> {
+    try {
+      const token = this.getToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/erasure/validate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ targets: targetPaths }),
+        signal: AbortSignal.timeout(3000),
+      });
+
+      const json = await res.json();
+      if (json.data) {
+        return { success: true, data: json.data };
+      }
+      if (json.error) {
+        return { success: false, error: json.error.message };
+      }
+    } catch (e) {
+      // Offline / fallback
+    }
+
+    return { success: false, error: 'Sidecar offline or validation failed' };
+  }
+
+  static async executePermanentDeletion(
+    targetPaths: string[],
+    confirmationSignature: string,
+    saveInRecovery: boolean,
+    mode: string = 'PERMANENT_DELETION',
+    sanitizationAlgorithm?: string
+  ): Promise<{
+    success: boolean;
+    data?: {
+      operation: OperationRecord;
+      recovery_copies: RecoveryCopyRecord[];
+      report: ReportRecord;
+    };
+    error?: string;
+  }> {
+    try {
+      const token = this.getToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/erasure/delete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          targets: targetPaths,
+          confirmation_signature: confirmationSignature,
+          save_in_recovery: saveInRecovery,
+          mode,
+          sanitization_algorithm: sanitizationAlgorithm,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const json = await res.json();
+      if (json.data) {
+        return { success: true, data: json.data };
+      }
+      if (json.error) {
+        return { success: false, error: json.error.message };
+      }
+    } catch (e) {
+      // Offline / fallback
+    }
+
+    return { success: false, error: 'Sidecar offline or operation failed' };
+  }
 }

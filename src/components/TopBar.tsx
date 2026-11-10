@@ -1,10 +1,5 @@
-/**
- * Cipher Labs - Top Bar Component (PART 3 Specification)
- * 64px height, page title left, minimize/restore menu toggle, round dark mode toggle right.
- */
-
 import React from 'react';
-import { Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Keyboard } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface TopBarProps {
@@ -16,6 +11,7 @@ interface TopBarProps {
   onSignOut: () => void;
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
+  onToggleShortcutsModal?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -27,6 +23,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSignOut,
   isMinimized = false,
   onToggleMinimize,
+  onToggleShortcutsModal,
 }) => {
   return (
     <header
@@ -86,22 +83,23 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="text-[11px]">Ledger Synced</span>
         </div>
 
-        {/* Round Dark-Mode Toggle (Moon in light mode, Sun in dark mode) */}
-        <button
-          onClick={onToggleTheme}
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-150 border ${
-            isDark
-              ? 'bg-[#122A4D] border-[#1E3A5F] text-amber-300 hover:bg-[#1E3A5F]'
-              : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          {isDark ? (
-            <Sun className="w-4 h-4 stroke-[2.2]" />
-          ) : (
-            <Moon className="w-4 h-4 stroke-[2.2]" />
-          )}
-        </button>
+        {/* Keyboard Shortcuts Trigger Button */}
+        {onToggleShortcutsModal && (
+          <button
+            onClick={onToggleShortcutsModal}
+            title="Keyboard Shortcuts (Shift + ? or Alt + /)"
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium border transition-all cursor-pointer ${
+              isDark
+                ? 'bg-[#122A4D] border-[#1E3A5F] text-cyan-400 hover:border-cyan-500/50 hover:bg-[#1E3A5F]'
+                : 'bg-slate-100 border-slate-200 text-cyan-700 hover:bg-slate-200'
+            }`}
+          >
+            <Keyboard className="w-3.5 h-3.5" />
+            <span>Shortcuts (?)</span>
+          </button>
+        )}
+
+
 
         {/* User Profile Pill & Sign Out */}
         <div className="flex items-center space-x-2">

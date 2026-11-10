@@ -6,14 +6,87 @@ Handles simulation execution, target inspections, and verification re-checks.
 import os
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Header
-from ..schemas import ResponseEnvelope, ErrorDetail, SimulationRunRequest
+from ..schemas import (
+    ResponseEnvelope,
+    ErrorDetail,
+    SimulationRunRequest,
+    TargetValidateRequest,
+    PermanentDeleteRunRequest,
+)
 from ..auth import get_current_user
 from ..config import TEST_WORKSPACE_DIR, RESTORED_OUTPUT_DIR, RECOVERY_VAULT_DIR
 from ..simulation import execute_simulation, compute_file_sha256, seed_sample_workspace_files
+from ..deletion import analyze_and_validate_path, execute_actual_permanent_deletion
 from ..audit import log_audit_event, verify_audit_chain
 from ..db import get_db
 
 router = APIRouter(prefix="/api", tags=["operations"])
+
+@router.post("/erasure/validate", response_model=ResponseEnvelope)
+async def validate_erasure_targets(
+    req: TargetValidateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    if not req.targets:
+        return ResponseEnvelope(
+            error=ErrorDetail(code="VALIDATION_FAILED", message="At least one target path must be provided.")
+        )
+    analysis = [analyze_and_validate_path(t) for t in req.targets]
+    valid_count = sum(1 for a in analysis if a["is_valid"])
+    invalid_count = len(analysis) - valid_count
+    total_size = sum(a["size_bytes"] for a in analysis if a["is_valid"])
+    total_files = sum(a["contained_files"] for a in analysis if a["is_valid"])
+    total_folders = sum(a["contained_folders"] for a in analysis if a["is_valid"])
+
+    return ResponseEnvelope(data={
+        "targets": analysis,
+        "summary": {
+            "total_targets": len(analysis),
+            "eligible_targets": valid_count,
+            "ineligible_targets": invalid_count,
+            "total_size_bytes": total_size,
+            "total_files": total_files,
+            "total_folders": total_folders
+        }
+    })
+
+@router.post("/erasure/delete", response_model=ResponseEnvelope)
+async def execute_permanent_erasure(
+    req: PermanentDeleteRunRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    current_user: dict = Depends(get_current_user)
+):
+    if not req.targets:
+        return ResponseEnvelope(
+            error=ErrorDetail(code="VALIDATION_FAILED", message="At least one target path must be provided for deletion.")
+        )
+    conf_sig = req.confirmation_signature.upper()
+    if "PERMANENT" not in conf_sig and "SANITIZE" not in conf_sig and "CONFIRM" not in conf_sig:
+        return ResponseEnvelope(
+            error=ErrorDetail(code="VALIDATION_FAILED", message="Explicit confirmation signature ('PERMANENTLY DELETE' or 'CONFIRM SANITIZE') is required.")
+        )
+
+    idem_key = idempotency_key or f"idem-del-{int(os.times().elapsed * 1000)}"
+
+    try:
+        op, copies, report = await execute_actual_permanent_deletion(
+            user_id=current_user["id"],
+            target_paths=req.targets,
+            confirmation_signature=req.confirmation_signature,
+            idempotency_key=idem_key,
+            save_in_recovery=req.save_in_recovery,
+            mode=req.mode,
+            sanitization_algorithm=req.sanitization_algorithm
+        )
+        return ResponseEnvelope(data={"operation": op, "recovery_copies": copies, "report": report})
+    except ValueError as ve:
+        return ResponseEnvelope(
+            error=ErrorDetail(code="DELETION_NOT_ALLOWED", message=str(ve))
+        )
+    except Exception as e:
+        return ResponseEnvelope(
+            error=ErrorDetail(code="DELETION_FAILED", message=f"Failed executing operation: {str(e)}")
+        )
 
 @router.get("/erasure/simulate/targets", response_model=ResponseEnvelope)
 async def get_simulation_targets(current_user: dict = Depends(get_current_user)):
