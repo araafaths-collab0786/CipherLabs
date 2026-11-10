@@ -15,15 +15,15 @@ import { ReportsAudit } from './pages/ReportsAudit';
 import { DevicesPage } from './pages/DevicesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthPage } from './pages/AuthPage';
-import { BrowseFilesModal } from './components/BrowseFilesModal';
 import { StorageService } from './services/storage';
+import { logoutGoogle } from './services/firebaseAuth';
+import { CookieConsentBanner, CookiePreferencesModal } from './components/CookiePreferencesModal';
 import {
   AuditLogEntry,
   DeviceRecord,
   OperationRecord,
   RecoveryCopyRecord,
   ReportRecord,
-  TestFile,
   UserProfile,
 } from './types';
 
@@ -47,18 +47,14 @@ export default function App() {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>(() => StorageService.getAuditLog());
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState<boolean>(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
     const pref = StorageService.getProfile().preferences.theme;
     return pref ? pref === 'dark' : true;
   });
 
-  // Controlled test file selection for Secure Erasure
-  const [selectedTestFiles, setSelectedTestFiles] = useState<TestFile[]>(() => {
-    const all = StorageService.getTestFiles();
-    return all.length > 0 ? [all[0]] : [];
-  });
-  const [isBrowseFilesOpen, setIsBrowseFilesOpen] = useState(false);
   const [activeReportToView, setActiveReportToView] = useState<ReportRecord | null>(null);
+  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
 
   // Sync theme with HTML root class
   useEffect(() => {
@@ -141,19 +137,29 @@ export default function App() {
         isDark ? 'bg-[#0B1F3A] text-slate-100' : 'bg-[#F3F6F8] text-slate-900'
       }`}
     >
-      {/* 260px Left Sidebar (PART 3) */}
-      <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} isDark={isDark} />
+      {/* Left Sidebar (Collapsible) */}
+      <Sidebar
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        isDark={isDark}
+        isMinimized={isSidebarMinimized}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* 64px Top Bar (PART 3) */}
+        {/* Top Bar with Minimize/Restore Toggle */}
         <TopBar
           title={getPageTitle(currentTab)}
           subtitle="Cipher Labs • SECURE. RECOVER. VERIFY."
           isDark={isDark}
           onToggleTheme={handleToggleTheme}
           profile={profile}
-          onSignOut={() => setIsAuthenticated(false)}
+          onSignOut={() => {
+            logoutGoogle();
+            setIsAuthenticated(false);
+          }}
+          isMinimized={isSidebarMinimized}
+          onToggleMinimize={() => setIsSidebarMinimized((prev) => !prev)}
         />
 
         {/* Scrollable Page Body */}
@@ -163,10 +169,10 @@ export default function App() {
               <Dashboard
                 operations={operations}
                 reports={reports}
+                recoveryCopies={recoveryCopies}
                 profile={profile}
                 isDark={isDark}
                 onNavigate={setCurrentTab}
-                onOpenBrowseFiles={() => setIsBrowseFilesOpen(true)}
                 onViewReport={(rep) => {
                   setActiveReportToView(rep);
                   setCurrentTab('reports');
@@ -177,9 +183,7 @@ export default function App() {
             {currentTab === 'erasure' && (
               <SecureErasure
                 isDark={isDark}
-                onOpenBrowseFiles={() => setIsBrowseFilesOpen(true)}
-                selectedFiles={selectedTestFiles}
-                onClearSelectedFiles={() => setSelectedTestFiles([])}
+                profile={profile}
                 onSimulationCompleted={handleSimulationCompleted}
                 onNavigateToRecovery={() => setCurrentTab('recovery')}
               />
@@ -198,6 +202,13 @@ export default function App() {
                 isDark={isDark}
                 operations={operations}
                 onRefreshOperations={handleRefreshOperations}
+                onNavigateToReports={(reportId) => {
+                  if (reportId) {
+                    const rep = StorageService.getReports().find((r) => r.id === reportId);
+                    if (rep) setActiveReportToView(rep);
+                  }
+                  setCurrentTab('reports');
+                }}
               />
             )}
 
@@ -226,19 +237,26 @@ export default function App() {
                 onToggleTheme={handleToggleTheme}
                 profile={profile}
                 onUpdateProfile={setProfile}
-                onSignOut={() => setIsAuthenticated(false)}
+                onSignOut={() => {
+                  logoutGoogle();
+                  setIsAuthenticated(false);
+                }}
               />
             )}
           </div>
         </main>
       </div>
 
-      {/* Controlled Test File Browser Modal (NEW FEATURE: Browse Files) */}
-      <BrowseFilesModal
-        isOpen={isBrowseFilesOpen}
-        onClose={() => setIsBrowseFilesOpen(false)}
-        initiallySelectedIds={selectedTestFiles.map((f) => f.id)}
-        onSelectFiles={(files) => setSelectedTestFiles(files)}
+      {/* Global Cookie Consent Banner */}
+      <CookieConsentBanner
+        onOpenPreferences={() => setIsCookieModalOpen(true)}
+        isDark={isDark}
+      />
+
+      {/* Global Cookie Preferences Modal */}
+      <CookiePreferencesModal
+        isOpen={isCookieModalOpen}
+        onClose={() => setIsCookieModalOpen(false)}
         isDark={isDark}
       />
     </div>

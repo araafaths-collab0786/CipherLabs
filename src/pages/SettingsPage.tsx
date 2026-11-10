@@ -17,6 +17,8 @@ import {
   Save,
   Link,
   Laptop,
+  Cookie,
+  FileText,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { StorageService } from '../services/storage';
@@ -99,8 +101,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings & Preferences</h1>
-        <p className="text-sm text-slate-400 mt-0.5">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Settings & Preferences</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
           Operator profile, theme appearance, log retention policies, and cryptographic credentials.
         </p>
       </div>
@@ -115,10 +117,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-inherit">
           <div className="flex items-center space-x-2 text-inherit">
             <User className="w-5 h-5 text-cyan-500" />
-            <h3 className="font-bold text-sm uppercase tracking-wider">Operator Profile</h3>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-slate-900 dark:text-slate-100">Operator Profile</h3>
           </div>
           {isSaved && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1 font-semibold">
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
               <CheckCircle2 className="w-4 h-4" /> Preferences Saved
             </span>
           )}
@@ -126,7 +128,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-400 mb-1">
               First Name (Required)
             </label>
             <input
@@ -143,7 +145,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-400 mb-1">
               Last Name (Required)
             </label>
             <input
@@ -323,58 +325,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       </div>
 
-      {/* Section 4: Supabase Key Compatibility & Deep Link Architecture (Corrections 1-3) */}
-      <div
-        className={`p-6 rounded-2xl border space-y-4 shadow-sm ${
-          isDark ? 'bg-[#122A4D] border-[#1E3A5F]' : 'bg-white border-slate-200'
-        }`}
-      >
-        <div className="flex items-center space-x-2 text-inherit pb-3 border-b border-inherit">
-          <Database className="w-5 h-5 text-cyan-500" />
-          <h3 className="font-bold text-sm uppercase tracking-wider">
-            Supabase & Tauri Architecture Audit
-          </h3>
-        </div>
-
-        <div className="space-y-3 text-xs font-mono">
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-slate-400 text-[11px] block">SUPABASE KEY COMPATIBILITY:</span>
-              <span className="text-emerald-400 font-semibold">
-                Modern sb_publishable_... (Standard) + Legacy 3-segment JWT (Active)
-              </span>
-            </div>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-slate-400 text-[11px] block">DESKTOP DEEP-LINK SCHEME:</span>
-              <span className="text-cyan-400 font-semibold">
-                com.cipherlabs.desktop://auth/callback (Rust 1.90+ Plugin Configured)
-              </span>
-            </div>
-            <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-slate-400 text-[11px] block">AUDIT PRIVILEGES:</span>
-              <span className="text-emerald-400 font-semibold">
-                Direct inserts REVOKED. Controlled log_audit_event() security definer active.
-              </span>
-            </div>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-
-          <p className="text-[11px] text-slate-500 font-sans">
-            Note: Per security guidelines, API keys, JWT signatures, and Authorization tokens are
-            never logged or displayed.
-          </p>
-        </div>
-      </div>
-
-      {/* Section 5: Session Management (PART 3 & PART 4) */}
+      {/* Section 4: Session Management (PART 3 & PART 4) */}
       <div
         className={`p-6 rounded-2xl border space-y-4 shadow-sm ${
           isDark ? 'bg-[#122A4D] border-[#1E3A5F]' : 'bg-white border-slate-200'
@@ -387,16 +338,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h4 className="font-bold text-sm text-slate-200">Active Operator Session</h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Signed in as <strong className="text-cyan-400">{profile.email}</strong>. Sign out to return to the authentication gateway.
+            <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Active Operator Session</h4>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              Signed in as <strong className="text-cyan-700 dark:text-cyan-400">{profile.email}</strong>. Sign out to return to the authentication gateway.
             </p>
           </div>
 
           {onSignOut && (
             <button
               onClick={onSignOut}
-              className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all shadow-sm"
+              className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-bold transition-all shadow-sm"
             >
               Sign out of Workstation
             </button>

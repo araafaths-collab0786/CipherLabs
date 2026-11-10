@@ -1,10 +1,10 @@
 /**
  * Cipher Labs - Top Bar Component (PART 3 Specification)
- * 64px height, page title left, round dark mode toggle right.
+ * 64px height, page title left, minimize/restore menu toggle, round dark mode toggle right.
  */
 
 import React from 'react';
-import { Sun, Moon, Shield, CheckCircle2, User } from 'lucide-react';
+import { Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface TopBarProps {
@@ -14,6 +14,8 @@ interface TopBarProps {
   onToggleTheme: () => void;
   profile: UserProfile;
   onSignOut: () => void;
+  isMinimized?: boolean;
+  onToggleMinimize?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -23,23 +25,54 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleTheme,
   profile,
   onSignOut,
+  isMinimized = false,
+  onToggleMinimize,
 }) => {
   return (
     <header
-      className={`h-16 px-8 flex items-center justify-between border-b transition-colors duration-200 shrink-0 ${
+      className={`h-16 px-6 lg:px-8 flex items-center justify-between border-b transition-colors duration-200 shrink-0 ${
         isDark
           ? 'bg-[#0B1F3A]/90 border-[#1E3A5F] text-white'
           : 'bg-white/90 border-slate-200 text-slate-900'
       } backdrop-blur-md sticky top-0 z-20`}
     >
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-inherit flex items-center gap-2">
-          {title}
-        </h2>
-        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+      <div className="flex items-center space-x-3">
+        {/* Minimize / Restore Menu Button */}
+        {onToggleMinimize && (
+          <button
+            onClick={onToggleMinimize}
+            aria-label={isMinimized ? 'Restore menu bar' : 'Minimize menu bar'}
+            title={isMinimized ? 'Restore menu bar' : 'Minimize menu bar'}
+            className={`p-2 rounded-lg border transition-all duration-150 flex items-center gap-1.5 text-xs font-semibold ${
+              isDark
+                ? 'bg-[#122A4D] border-[#1E3A5F] text-slate-200 hover:bg-[#1E3A5F]'
+                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {isMinimized ? (
+              <PanelLeftOpen className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            )}
+            <span className="hidden sm:inline">
+              {isMinimized ? 'Restore' : 'Minimize'}
+            </span>
+          </button>
+        )}
+
+        <div>
+          <h2 className="text-lg lg:text-xl font-bold tracking-tight text-inherit flex items-center gap-2">
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
+              {subtitle}
+            </p>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-3 lg:space-x-4">
         {/* Sync Status Badge */}
         <div
           className={`hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
@@ -47,7 +80,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               ? 'bg-[#122A4D] border-[#1E3A5F] text-slate-300'
               : 'bg-slate-50 border-slate-200 text-slate-600'
           }`}
-          title="Supabase sync active; cryptographic local queue initialized"
+          title="Cryptographic ledger active; hash chain verified"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-[11px]">Ledger Synced</span>
@@ -80,7 +113,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 to-cyan-400 text-white flex items-center justify-center text-xs font-bold shadow-sm">
               {profile.firstName.charAt(0)}
             </div>
-            <span className="text-xs font-semibold text-inherit">
+            <span className="text-xs font-semibold text-inherit hidden sm:inline">
               {profile.firstName} {profile.lastName}
             </span>
           </div>

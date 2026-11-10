@@ -86,21 +86,21 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({
                   </div>
                 ) : (
                   <>
-                    <h3 className="font-bold text-base text-slate-100">{device.label}</h3>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{device.label}</h3>
                     <button
                       onClick={() => setIsEditingLabel(true)}
-                      className="p-1 text-slate-400 hover:text-cyan-400"
+                      className="p-1 text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400"
                       title="Rename Device Label"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                   </>
                 )}
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/20">
                   Active This Host
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-mono mt-0.5">
                 App Device UUID: {device.appDeviceId}
               </p>
             </div>
@@ -109,21 +109,21 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({
 
         {/* Device Technical Metadata */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5 text-xs font-mono">
-          <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800">
+          <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
             <span className="text-[10px] uppercase text-slate-500 block">OPERATING SYSTEM</span>
-            <span className="font-bold text-slate-200 mt-1 block">
+            <span className="font-bold text-slate-900 dark:text-slate-200 mt-1 block">
               {device.osName} {device.osVersion}
             </span>
           </div>
 
-          <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800">
+          <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
             <span className="text-[10px] uppercase text-slate-500 block">CIPHER LABS VERSION</span>
-            <span className="font-bold text-cyan-400 mt-1 block">v{device.appVersion} (FastAPI Sidecar)</span>
+            <span className="font-bold text-cyan-700 dark:text-cyan-400 mt-1 block">v{device.appVersion} (Forensic Core)</span>
           </div>
 
-          <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800">
+          <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
             <span className="text-[10px] uppercase text-slate-500 block">LAST AUDIT TELEMETRY</span>
-            <span className="font-bold text-slate-200 mt-1 block">
+            <span className="font-bold text-slate-900 dark:text-slate-200 mt-1 block">
               {new Date(device.lastSeenAt).toLocaleString()}
             </span>
           </div>
@@ -138,14 +138,14 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({
             isDark ? 'bg-[#122A4D] border-[#1E3A5F]' : 'bg-white border-slate-200'
           }`}
         >
-          <div className="flex items-center space-x-2 text-cyan-400">
+          <div className="flex items-center space-x-2 text-cyan-600 dark:text-cyan-400">
             <ShieldCheck className="w-5 h-5" />
-            <h3 className="font-bold text-sm uppercase tracking-wider">What is stored</h3>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-slate-900 dark:text-slate-100">What is stored</h3>
           </div>
-          <p className="text-xs text-slate-400 leading-relaxed">
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
             Per strict zero-hardware privacy architecture, Cipher Labs registers only:
           </p>
-          <ul className="text-xs text-slate-300 space-y-1.5 list-disc pl-4">
+          <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1.5 list-disc pl-4">
             <li>
               <strong>App-generated Device ID:</strong> A random UUID created on first run and stored
               in local application data.
@@ -171,28 +171,28 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({
             isDark ? 'bg-[#122A4D] border-[#1E3A5F]' : 'bg-white border-slate-200'
           }`}
         >
-          <div className="flex items-center space-x-2 text-emerald-400">
+          <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
             <Fingerprint className="w-5 h-5" />
-            <h3 className="font-bold text-sm uppercase tracking-wider">What is not collected</h3>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-slate-900 dark:text-slate-100">What is not collected</h3>
           </div>
-          <p className="text-xs text-slate-400 leading-relaxed">
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
             Hardware fingerprinting is strictly forbidden in Cipher Labs specifications:
           </p>
-          <ul className="text-xs text-slate-300 space-y-1.5 list-disc pl-4">
+          <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1.5 list-disc pl-4">
             <li>
-              <span className="text-red-400 font-semibold">NO</span> CPU model, architecture IDs, or processor serials.
+              <span className="text-red-500 dark:text-red-400 font-semibold">NO</span> CPU model, architecture IDs, or processor serials.
             </li>
             <li>
-              <span className="text-red-400 font-semibold">NO</span> GPU information or display adapter details.
+              <span className="text-red-500 dark:text-red-400 font-semibold">NO</span> GPU information or display adapter details.
             </li>
             <li>
-              <span className="text-red-400 font-semibold">NO</span> Motherboard or BIOS serial numbers.
+              <span className="text-red-500 dark:text-red-400 font-semibold">NO</span> Motherboard or BIOS serial numbers.
             </li>
             <li>
-              <span className="text-red-400 font-semibold">NO</span> MAC addresses or network adapter identifiers.
+              <span className="text-red-500 dark:text-red-400 font-semibold">NO</span> MAC addresses or network adapter identifiers.
             </li>
             <li>
-              <span className="text-red-400 font-semibold">NO</span> Physical disk serials or hardware volume fingerprints.
+              <span className="text-red-500 dark:text-red-400 font-semibold">NO</span> Physical disk serials or hardware volume fingerprints.
             </li>
           </ul>
         </div>

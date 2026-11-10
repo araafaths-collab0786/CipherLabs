@@ -16,6 +16,7 @@ import {
   Lock,
   Layers,
   ArrowRight,
+  Printer,
 } from 'lucide-react';
 import { AuditLogEntry, ReportRecord } from '../types';
 import { StorageService } from '../services/storage';
@@ -28,6 +29,20 @@ interface ReportsAuditProps {
   activeReportToView?: ReportRecord | null;
   onCloseReportModal: () => void;
 }
+
+const getReportDeletedFileName = (rep: ReportRecord): string => {
+  if (rep.reportJson?.targets && Array.isArray(rep.reportJson.targets) && rep.reportJson.targets.length > 0) {
+    const names = rep.reportJson.targets.map((t: any) => t.name).filter(Boolean);
+    if (names.length > 0) return names.join(', ');
+  }
+  if (rep.reportJson?.title && !rep.reportJson.title.includes('NIST') && !rep.reportJson.title.includes('Full Verified')) {
+    return rep.reportJson.title;
+  }
+  if (rep.reportJson?.method && !rep.reportJson.method.includes('NIST') && !rep.reportJson.method.includes('DoD') && !rep.reportJson.method.includes('BSI')) {
+    return rep.reportJson.method;
+  }
+  return 'Deleted File Report';
+};
 
 export const ReportsAudit: React.FC<ReportsAuditProps> = ({
   isDark,
@@ -79,8 +94,284 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
     downloadAnchor.remove();
   };
 
+  const handlePrintPdfFor = (report: ReportRecord) => {
+    if (!report) return;
+
+    const reportFileName = getReportDeletedFileName(report);
+    const dateFormatted = new Date(report.createdAt).toLocaleString();
+
+    const printableHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Audit Certificate - ${report.id}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 24px;
+            font-size: 12px;
+            line-height: 1.5;
+          }
+          .header {
+            border-bottom: 3px solid #06b6d4;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .brand {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0891b2;
+            letter-spacing: 0.5px;
+          }
+          .subtitle {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 2px;
+          }
+          .status-badge {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+          }
+          .card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+          }
+          .card-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #475569;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 4px;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+          .meta-item {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+          }
+          .meta-label {
+            color: #64748b;
+            font-weight: 600;
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+          }
+          .meta-value {
+            color: #0f172a;
+            font-weight: 700;
+            word-break: break-all;
+          }
+          .disclaimer {
+            background: #ecfeff;
+            border: 1px solid #a5f3fc;
+            color: #0e7490;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 11px;
+            margin-bottom: 16px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            margin-top: 8px;
+          }
+          th {
+            background: #f1f5f9;
+            color: #334155;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 2px solid #cbd5e1;
+            font-size: 10px;
+            text-transform: uppercase;
+          }
+          td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            word-break: break-all;
+          }
+          .proof-hash {
+            color: #0284c7;
+            font-weight: 600;
+          }
+          .footer {
+            margin-top: 30px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            text-align: center;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="brand">CIPHER LABS DIGITAL FORENSICS</div>
+            <div class="subtitle">Official Sanitization & Verification Certificate</div>
+          </div>
+          <div class="status-badge">${report.reportStatus}</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Certificate & Metadata</div>
+          <div class="grid">
+            <div class="meta-item">
+              <span class="meta-label">Report ID</span>
+              <span class="meta-value">${report.id}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Generated Timestamp</span>
+              <span class="meta-value">${dateFormatted}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Deleted Target(s)</span>
+              <span class="meta-value" style="color: #0891b2;">${reportFileName}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Verification Verdict</span>
+              <span class="meta-value" style="color: #059669;">${report.reportJson.verificationStatus}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Device Identifier</span>
+              <span class="meta-value">${report.reportJson.deviceInfo.appDeviceId}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Host OS & Architecture</span>
+              <span class="meta-value">${report.reportJson.deviceInfo.os}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="disclaimer">
+          <strong>Mandatory Audit Disclaimer:</strong> ${report.reportJson.simulationDisclaimer}
+        </div>
+
+        <div class="card">
+          <div class="card-title">Target File Proofs & SHA-256 Digests</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Target File</th>
+                <th>File Size</th>
+                <th>Cryptographic Pre-Hash (SHA-256)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(report.reportJson.targets || [])
+                .map(
+                  (t) => `
+                <tr>
+                  <td><strong>${t.name}</strong></td>
+                  <td>${t.size ? (t.size / 1024).toFixed(1) + ' KB' : 'N/A'}</td>
+                  <td class="proof-hash">${t.sha256 || 'N/A'}</td>
+                  <td style="color: #059669; font-weight: bold;">VERIFIED SANITIZED</td>
+                </tr>
+              `
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="font-family: ui-monospace, monospace; font-size: 10px;">
+          <div style="margin-bottom: 4px;"><strong>CANONICAL REPORT SHA-256:</strong> ${report.reportSha256}</div>
+          <div><strong>IDEMPOTENCY LOCK KEY:</strong> ${report.idempotencyKey}</div>
+        </div>
+
+        <div class="footer">
+          Cipher Labs Forensics • SECURE. RECOVER. VERIFY. • Tamper-Proof Cryptographic Ledger Entry
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    // Try popup window first
+    try {
+      const printWindow = window.open('', '_blank', 'width=900,height=750');
+      if (printWindow) {
+        printWindow.document.write(printableHtml);
+        printWindow.document.close();
+        return;
+      }
+    } catch {
+      // Ignore window open errors
+    }
+
+    // Fallback using invisible iframe
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(printableHtml);
+        doc.close();
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+          }, 1000);
+        }, 300);
+        return;
+      }
+    } catch {
+      // Final fallback
+      window.print();
+    }
+  };
+
   const handlePrintPdf = () => {
-    window.print();
+    if (selectedReport) {
+      handlePrintPdfFor(selectedReport);
+    } else {
+      window.print();
+    }
   };
 
   return (
@@ -153,21 +444,22 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-inherit">
-                {reports.map((rep) => (
+                {reports.map((rep, idx) => (
                   <div
-                    key={rep.id}
-                    className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs transition-colors hover:bg-slate-800/20"
+                    key={`${rep.id}-${idx}`}
+                    className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/20"
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-200">
-                          {rep.reportJson.method}
+                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5 truncate max-w-md">
+                          <FileText className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                          <span>{getReportDeletedFileName(rep)}</span>
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/20">
                           {rep.reportStatus}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400">
                         {rep.reportJson.simulationDisclaimer}
                       </div>
                       <div className="font-mono text-[10px] text-slate-500 space-x-3">
@@ -182,18 +474,27 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
                     <div className="flex items-center space-x-2 shrink-0">
                       <button
                         onClick={() => setSelectedReport(rep)}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                        className="px-3 py-1.5 rounded-lg bg-[#06B6D4] hover:bg-[#0891B2] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
                       >
-                        <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>View Dossier</span>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Report</span>
                       </button>
 
                       <button
                         onClick={() => handleExportJson(rep)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-medium flex items-center gap-1.5"
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5"
                       >
-                        <Download className="w-3.5 h-3.5 text-cyan-400" />
+                        <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
                         <span>JSON</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePrintPdfFor(rep)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                        title="Print or Save PDF Certificate"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                        <span>Print / Save PDF</span>
                       </button>
                     </div>
                   </div>
@@ -279,14 +580,14 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
             </div>
 
             <div className="divide-y divide-inherit">
-              {auditLog.map((entry) => (
-                <div key={entry.id} className="p-4 font-mono text-xs space-y-1.5">
+              {auditLog.map((entry, idx) => (
+                <div key={`${entry.id}-${entry.entryHash || idx}-${idx}`} className="p-4 font-mono text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-cyan-700 dark:text-cyan-400 font-bold">
                         #{entry.id}
                       </span>
-                      <span className="font-bold text-slate-200">{entry.action}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{entry.action}</span>
                       {entry.operationId && (
                         <span className="text-[10px] text-slate-500">[{entry.operationId}]</span>
                       )}
@@ -296,18 +597,18 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
                     <div>
                       <span className="text-slate-500">Previous Hash:</span>{' '}
                       <span
-                        className={entry.previousHash === 'GENESIS' ? 'text-amber-400' : 'text-slate-300'}
+                        className={entry.previousHash === 'GENESIS' ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}
                       >
                         {entry.previousHash.substring(0, 24)}...
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500">Entry Hash:</span>{' '}
-                      <span className="text-emerald-400">{entry.entryHash.substring(0, 24)}...</span>
+                      <span className="text-emerald-700 dark:text-emerald-400 font-bold">{entry.entryHash.substring(0, 24)}...</span>
                     </div>
                   </div>
                 </div>
@@ -317,7 +618,7 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
         </div>
       )}
 
-      {/* Report Modal / Dossier Viewer */}
+      {/* Report Modal / Report Viewer */}
       {selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div
@@ -333,7 +634,9 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">Forensic Sanitization Certificate</h3>
+                  <h3 className="text-base font-bold truncate max-w-md">
+                    Audit Report: {getReportDeletedFileName(selectedReport)}
+                  </h3>
                   <p className="text-xs text-slate-400 font-mono">ID: {selectedReport.id}</p>
                 </div>
               </div>
@@ -355,8 +658,10 @@ export const ReportsAudit: React.FC<ReportsAuditProps> = ({
                   <span className="font-bold text-white">Cipher Labs Digital Forensics</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">STANDARD METHOD:</span>
-                  <span className="text-cyan-400">{selectedReport.reportJson.method}</span>
+                  <span className="text-slate-400">DELETED FILE(S):</span>
+                  <span className="text-cyan-400 font-bold truncate max-w-xs">
+                    {getReportDeletedFileName(selectedReport)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">EXECUTION STATUS:</span>

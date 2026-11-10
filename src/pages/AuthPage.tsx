@@ -18,16 +18,29 @@ import {
   HelpCircle,
   Layers,
   Info,
+  LogIn,
+  UserPlus,
+  Cookie,
+  FileText,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { StorageService } from '../services/storage';
+import { ApiService } from '../services/api';
+import { LegalModal } from '../components/LegalModals';
+import { CookiePreferencesModal } from '../components/CookiePreferencesModal';
+import { googleSignIn } from '../services/firebaseAuth';
 
 interface AuthPageProps {
   onLoginSuccess: (profile: UserProfile) => void;
   isDark: boolean;
+  onOpenCookiePreferences?: () => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({
+  onLoginSuccess,
+  isDark,
+  onOpenCookiePreferences,
+}) => {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
 
   // Login form state (strictly manual entry)
@@ -46,9 +59,53 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [signupError, setSignupError] = useState<string | null>(null);
 
+  // Google Sign-In state
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+
+  // Legal acceptance & Cookie preference states
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [activeLegalModal, setActiveLegalModal] = useState<'privacy' | 'terms' | null>(null);
+  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
+
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccessMessage, setForgotSuccessMessage] = useState<string | null>(null);
+
+  const handleGoogleSignIn = async () => {
+    setLoginError(null);
+    setSignupError(null);
+
+    if (!acceptedTerms) {
+      const errMsg =
+        'You must check the box to confirm you have read and agree to the Privacy Policy and Terms and Conditions.';
+      if (mode === 'signup') setSignupError(errMsg);
+      else setLoginError(errMsg);
+      return;
+    }
+
+    setIsGoogleSigningIn(true);
+    try {
+      const res = await googleSignIn();
+      if (res && res.profile) {
+        StorageService.updateProfile(res.profile);
+        await StorageService.logAuditEvent('OPERATOR_LOGGED_IN_GOOGLE_OAUTH', undefined, {
+          userId: res.profile.id,
+          email: res.profile.email,
+        });
+        onLoginSuccess(res.profile);
+      }
+    } catch (err: any) {
+      console.error('Google sign-in error:', err);
+      // If user closes popup, do not show fatal error, just inform gracefully
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        const msg = err?.message || 'Google sign-in failed. Please try again.';
+        if (mode === 'signup') setSignupError(msg);
+        else setLoginError(msg);
+      }
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
 
   // Password strength computation (PART 4)
   const calculatePasswordStrength = (pwd: string) => {
@@ -62,9 +119,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
 
   const pwdStrength = calculatePasswordStrength(signupPassword);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
+
+    if (!acceptedTerms) {
+      setLoginError('You must check the box to confirm you have read and agree to the Privacy Policy and Terms and Conditions.');
+      return;
+    }
 
     const emailTrim = loginEmail.trim();
     const pwdTrim = loginPassword.trim();
@@ -79,31 +141,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
       return;
     }
 
-    // Per PART 4 failure message rule:
-    // "Email or password is incorrect. Never say which field was wrong."
     if (pwdTrim.length < 6) {
       setLoginError('Email or password is incorrect.');
       return;
     }
 
-    // Success: update profile with manually entered credentials
-    const existing = StorageService.getProfile();
-    const rawName = emailTrim.split('@')[0];
-    const derivedFirstName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-    const activeProfile: UserProfile = {
-      ...existing,
-      firstName: existing.email === emailTrim ? existing.firstName : derivedFirstName,
-      lastName: existing.email === emailTrim ? existing.lastName : 'Operator',
-      email: emailTrim,
-    };
-    StorageService.updateProfile(activeProfile);
-    StorageService.logAuditEvent('OPERATOR_SIGNED_IN', undefined, { email: emailTrim });
-    onLoginSuccess(activeProfile);
+    const res = await ApiService.login(emailTrim, pwdTrim);
+    if (res.success && res.profile) {
+      await StorageService.logAuditEvent('OPERATOR_SIGNED_IN_FASTAPI', undefined, { email: emailTrim });
+      onLoginSuccess(res.profile);
+    } else {
+      setLoginError(res.error || 'Email or password is incorrect.');
+    }
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignupError(null);
+
+    if (!acceptedTerms) {
+      setSignupError('You must check the box to confirm you have read and agree to the Privacy Policy and Terms and Conditions.');
+      return;
+    }
 
     // Validation
     if (signupFirstName.trim().length < 1 || signupFirstName.trim().length > 60) {
@@ -115,7 +174,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
       return;
     }
     if (!signupEmail.includes('@') || !signupEmail.includes('.')) {
-      setSignupError('Please provide a valid email address.');
+      setSignupError('Please enter a valid email address.');
       return;
     }
 
@@ -139,26 +198,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
       return;
     }
 
-    // Create profile (simulating the database trigger public.handle_new_user)
-    const newProfile: UserProfile = {
-      id: `usr-${Date.now()}`,
+    const res = await ApiService.signup({
       firstName: signupFirstName.trim(),
       lastName: signupLastName.trim(),
       email: signupEmail.trim(),
+      password: signupPassword,
       phone: signupPhone.trim() || undefined,
-      preferences: {
-        theme: isDark ? 'dark' : 'light',
-        keepLogsDays: 90,
-      },
-    };
-
-    StorageService.updateProfile(newProfile);
-    StorageService.logAuditEvent('OPERATOR_SIGNED_UP_VIA_TRIGGER', undefined, {
-      userId: newProfile.id,
-      email: newProfile.email,
     });
 
-    onLoginSuccess(newProfile);
+    if (res.success && res.profile) {
+      await StorageService.logAuditEvent('OPERATOR_SIGNED_UP_MONGODB', undefined, {
+        userId: res.profile.id,
+        email: res.profile.email,
+      });
+      onLoginSuccess(res.profile);
+    } else {
+      setSignupError(res.error || 'Registration failed. Please check credentials.');
+    }
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -193,12 +249,48 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
 
         {/* Card Box */}
         <div className="p-7 rounded-2xl bg-[#122A4D] border border-[#1E3A5F] shadow-2xl space-y-5">
+          {/* Top Navigation Switcher: Login / Sign In vs Sign Up */}
+          {mode !== 'forgot' && (
+            <div className="grid grid-cols-2 p-1 rounded-xl bg-[#0B1F3A] border border-[#1E3A5F]">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setLoginError(null);
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  mode === 'login'
+                    ? 'bg-[#06B6D4] text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Login / Sign In</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  setSignupError(null);
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  mode === 'signup'
+                    ? 'bg-[#06B6D4] text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Sign Up</span>
+              </button>
+            </div>
+          )}
+
           {/* LOGIN VIEW */}
           {mode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="flex items-center justify-between pb-1 border-b border-[#1E3A5F]">
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">
-                  Operator Sign In
+                  Login / Sign In
                 </h2>
                 <button
                   type="button"
@@ -206,9 +298,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                     setMode('signup');
                     setLoginError(null);
                   }}
-                  className="text-xs font-semibold text-cyan-400 hover:text-cyan-300"
+                  className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
                 >
-                  Create account
+                  <span>Go to Sign Up</span>
+                  <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
@@ -267,55 +360,109 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                 </div>
               </div>
 
+              {/* Mandatory Privacy Policy & Terms Acceptance Checkbox */}
+              <div className="pt-1 pb-0.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => {
+                      setAcceptedTerms(e.target.checked);
+                      if (loginError?.includes('Privacy Policy')) setLoginError(null);
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded border-[#1E3A5F] bg-[#0B1F3A] text-cyan-500 focus:ring-cyan-500 cursor-pointer shrink-0"
+                  />
+                  <span className="text-[11px] text-slate-300 leading-snug">
+                    I confirm that I have read and agree to the{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveLegalModal('privacy')}
+                      className="text-cyan-400 font-semibold underline hover:text-cyan-300 inline"
+                    >
+                      Privacy Policy
+                    </button>{' '}
+                    and{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveLegalModal('terms')}
+                      className="text-cyan-400 font-semibold underline hover:text-cyan-300 inline"
+                    >
+                      Terms and Conditions
+                    </button>
+                    .
+                  </span>
+                </label>
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-2.5 rounded-xl bg-[#06B6D4] hover:bg-[#0891B2] text-white text-xs font-bold shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-2"
               >
-                <span>Sign In to Workstation</span>
+                <span>Login / Sign In</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Google OAuth (PART 4 rule: disabled until deep-link return flow configured) */}
-              <div className="pt-2">
+              <div className="pt-1 text-center">
+                <p className="text-xs text-slate-400">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setLoginError(null);
+                    }}
+                    className="font-bold text-cyan-400 hover:underline"
+                  >
+                    Sign Up
+                  </button>
+                </p>
+              </div>
+
+              {/* Google OAuth Sign-In */}
+              <div className="pt-2 border-t border-[#1E3A5F]">
                 <button
                   type="button"
-                  disabled
-                  className="w-full py-2 rounded-xl border border-slate-700 bg-slate-900/50 text-slate-500 text-xs font-medium cursor-not-allowed flex items-center justify-center gap-2"
-                  title="Google sign-in is available after Supabase Google login is configured."
+                  onClick={handleGoogleSignIn}
+                  disabled={isGoogleSigningIn}
+                  className="w-full py-2.5 rounded-xl border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-100 text-xs font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 disabled:opacity-50 cursor-pointer"
                 >
-                  <svg className="w-4 h-4 opacity-50" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Continue with Google</span>
+                  {isGoogleSigningIn ? (
+                    <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        fill="#EA4335"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#4285F4"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                  )}
+                  <span>{isGoogleSigningIn ? 'Signing in with Google...' : 'Continue with Google'}</span>
                 </button>
-                <p className="text-[10px] text-slate-500 text-center mt-1">
-                  Google sign-in is available after Supabase Google login is configured.
+                <p className="text-[10px] text-slate-400 text-center mt-1.5">
+                  Secure OAuth 2.0 Single Sign-On powered by Google
                 </p>
               </div>
             </form>
           )}
 
-          {/* SIGNUP VIEW (PART 4 Specification in exact field order) */}
+          {/* SIGNUP VIEW */}
           {mode === 'signup' && (
             <form onSubmit={handleSignupSubmit} className="space-y-3">
               <div className="flex items-center justify-between pb-1 border-b border-[#1E3A5F]">
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">
-                  Operator Registration
+                  Sign Up
                 </h2>
                 <button
                   type="button"
@@ -323,9 +470,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                     setMode('login');
                     setSignupError(null);
                   }}
-                  className="text-xs font-semibold text-cyan-400 hover:text-cyan-300"
+                  className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
                 >
-                  Already registered?
+                  <span>Back to Login</span>
                 </button>
               </div>
 
@@ -463,13 +610,101 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                 />
               </div>
 
-              {/* 7. Create Account Button */}
+              {/* Mandatory Privacy Policy & Terms Acceptance Checkbox */}
+              <div className="pt-1 pb-0.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => {
+                      setAcceptedTerms(e.target.checked);
+                      if (signupError?.includes('Privacy Policy')) setSignupError(null);
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded border-[#1E3A5F] bg-[#0B1F3A] text-cyan-500 focus:ring-cyan-500 cursor-pointer shrink-0"
+                  />
+                  <span className="text-[11px] text-slate-300 leading-snug">
+                    I confirm that I have read and agree to the{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveLegalModal('privacy')}
+                      className="text-cyan-400 font-semibold underline hover:text-cyan-300 inline"
+                    >
+                      Privacy Policy
+                    </button>{' '}
+                    and{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveLegalModal('terms')}
+                      className="text-cyan-400 font-semibold underline hover:text-cyan-300 inline"
+                    >
+                      Terms and Conditions
+                    </button>
+                    .
+                  </span>
+                </label>
+              </div>
+
+              {/* 7. Sign Up Submit Button */}
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#06B6D4] hover:bg-[#0891B2] text-white text-xs font-bold shadow-md transition-all active:scale-[0.98] mt-2"
+                className="w-full py-2.5 rounded-xl bg-[#06B6D4] hover:bg-[#0891B2] text-white text-xs font-bold shadow-md transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2"
               >
-                Create Account (Database Trigger Mode)
+                <UserPlus className="w-4 h-4" />
+                <span>Sign Up & Create Account</span>
               </button>
+
+              <div className="pt-1 text-center">
+                <p className="text-xs text-slate-400">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('login');
+                      setSignupError(null);
+                    }}
+                    className="font-bold text-cyan-400 hover:underline"
+                  >
+                    Login / Sign In
+                  </button>
+                </p>
+              </div>
+
+              {/* Google OAuth Sign-In */}
+              <div className="pt-2 border-t border-[#1E3A5F]">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isGoogleSigningIn}
+                  className="w-full py-2.5 rounded-xl border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-100 text-xs font-semibold shadow-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {isGoogleSigningIn ? (
+                    <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        fill="#EA4335"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#4285F4"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                  )}
+                  <span>{isGoogleSigningIn ? 'Signing in with Google...' : 'Continue with Google'}</span>
+                </button>
+                <p className="text-[10px] text-slate-400 text-center mt-1.5">
+                  Secure OAuth 2.0 Single Sign-On powered by Google
+                </p>
+              </div>
             </form>
           )}
 
@@ -488,7 +723,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                   }}
                   className="text-xs font-semibold text-cyan-400 hover:text-cyan-300"
                 >
-                  Back to Sign In
+                  Back to Login / Sign In
                 </button>
               </div>
 
@@ -506,7 +741,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
                     onClick={() => setMode('login')}
                     className="text-xs font-semibold text-cyan-400 hover:underline pt-2 block"
                   >
-                    Return to login
+                    Return to Login / Sign In
                   </button>
                 </div>
               ) : (
@@ -539,12 +774,57 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, isDark }) =>
           )}
         </div>
 
-        {/* Security Footnote */}
-        <div className="text-center text-[11px] text-slate-500 space-y-1">
-          <p>Cipher Labs Desktop Workstation • Port 8765 Loopback Only</p>
-          <p>Zero external cookies • Hardware identifiers never collected</p>
+        {/* Security & Legal Footnote */}
+        <div className="text-center text-[11px] text-slate-400 space-y-2 pt-2">
+          <div className="flex items-center justify-center gap-3 text-xs flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveLegalModal('privacy')}
+              className="text-slate-400 hover:text-cyan-400 transition-colors underline-offset-2 hover:underline"
+            >
+              Privacy Policy
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => setActiveLegalModal('terms')}
+              className="text-slate-400 hover:text-cyan-400 transition-colors underline-offset-2 hover:underline"
+            >
+              Terms and Conditions
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenCookiePreferences) onOpenCookiePreferences();
+                else setIsCookieModalOpen(true);
+              }}
+              className="text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1 underline-offset-2 hover:underline"
+            >
+              <Cookie className="w-3.5 h-3.5" />
+              <span>Cookie Preferences</span>
+            </button>
+          </div>
+          <p className="text-slate-500 text-[10px]">
+            Cipher Labs Forensics • Zero external telemetry • Local cryptographic ledger
+          </p>
         </div>
       </div>
+
+      {/* Interactive Privacy Policy & Terms Modal */}
+      <LegalModal
+        type={activeLegalModal}
+        onClose={() => setActiveLegalModal(null)}
+        onAccept={() => setAcceptedTerms(true)}
+        isDark={isDark}
+      />
+
+      {/* Cookie Preferences Modal */}
+      <CookiePreferencesModal
+        isOpen={isCookieModalOpen}
+        onClose={() => setIsCookieModalOpen(false)}
+        isDark={isDark}
+      />
     </div>
   );
 };

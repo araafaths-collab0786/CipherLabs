@@ -90,40 +90,29 @@ try {
     Report-Check "Tauri CLI" $false "Tauri CLI not detected. Run npm install in frontend/"
 }
 
-# 7. Supabase Configuration Validation (Key value is NEVER printed)
-$supabaseEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\supabase.env"
-if (-not (Test-Path $supabaseEnvFile)) {
-    $supabaseEnvFile = Join-Path $PSScriptRoot "..\.env"
+# 7. MongoDB Atlas Configuration Validation (Credentials are NEVER printed)
+$mongoEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\mongodb.env"
+if (-not (Test-Path $mongoEnvFile)) {
+    $mongoEnvFile = Join-Path $PSScriptRoot "..\.env"
 }
 
-if (Test-Path $supabaseEnvFile) {
-    $envContent = Get-Content $supabaseEnvFile -Raw
-    $urlMatches = [regex]::Match($envContent, "CIPHER_SUPABASE_URL\s*=\s*['""]?(https://[^\s'""\r\n]+)")
-    if ($urlMatches.Success) {
-        Report-Check "Supabase URL" $true "Present and format OK (https:// schema validated)"
+if (Test-Path $mongoEnvFile) {
+    $envContent = Get-Content $mongoEnvFile -Raw
+    $uriMatches = [regex]::Match($envContent, "CIPHER_MONGODB_URI\s*=\s*['""]?((?:mongodb(?:\+srv)?):\/\/[^\s'""\r\n]+)")
+    if ($uriMatches.Success) {
+        Report-Check "MongoDB Atlas URI" $true "Present and format OK (mongodb+srv:// cluster protocol validated)"
     } else {
-        Report-Check "Supabase URL" $false "Missing or invalid format (must start with https://)"
+        Report-Check "MongoDB Atlas URI" $false "Missing or invalid format (must start with mongodb+srv:// or mongodb://)"
     }
 
-    # RECONCILED: Support both modern sb_publishable_... keys (standard) and legacy 3-part JWT anon keys
-    $keyMatches = [regex]::Match($envContent, "CIPHER_SUPABASE_ANON_KEY\s*=\s*['""]?([^\s'""\r\n]+)")
-    if ($keyMatches.Success) {
-        $keyVal = $keyMatches.Groups[1].Value
-        $isModernPublishable = $keyVal -like "sb_publishable_*"
-        $isLegacyJwt = ($keyVal.Split('.').Count -eq 3)
-
-        if ($isModernPublishable) {
-            Report-Check "Supabase Key" $true "Present and format OK (Modern sb_publishable_... key detected)"
-        } elseif ($isLegacyJwt) {
-            Report-Check "Supabase Key" $true "Present and format OK (Legacy 3-segment JWT key accepted for backward compatibility)"
-        } else {
-            Report-Check "Supabase Key" $false "Invalid key format (must be modern sb_publishable_ or legacy 3-segment JWT)"
-        }
+    $jwtMatches = [regex]::Match($envContent, "CIPHER_JWT_SECRET\s*=\s*['""]?([^\s'""\r\n]+)")
+    if ($jwtMatches.Success) {
+        Report-Check "JWT Secret Key" $true "Present and format OK (FastAPI auth secret configured)"
     } else {
-        Report-Check "Supabase Key" $false "Missing CIPHER_SUPABASE_ANON_KEY in config"
+        Report-Check "JWT Secret Key" $true "Optional in development (fallback default entropy used)"
     }
 } else {
-    Write-Host " [INFO] supabase.env not present. System running in deliberate CONFIG_MISSING mode." -ForegroundColor Yellow
+    Write-Host " [INFO] mongodb.env not present. System running in deliberate CONFIG_MISSING mode." -ForegroundColor Yellow
 }
 
 Write-Host "========================================================" -ForegroundColor Cyan

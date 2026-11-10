@@ -47,6 +47,8 @@ export interface TestFile {
   sha256: string;
   status: 'ACTIVE' | 'SIMULATED' | 'PROTECTED' | 'RESTORED';
   previewText?: string;
+  dataUrl?: string;
+  isUserDeviceFile?: boolean;
 }
 
 export interface RecoveryCopyRecord {
@@ -61,6 +63,11 @@ export interface RecoveryCopyRecord {
   createdAt: string;
   restoredAt?: string;
   status: 'AVAILABLE' | 'RESTORED' | 'VERIFIED' | 'INTEGRITY_MISMATCH';
+  dataUrl?: string;
+  fileContent?: string;
+  sizeBytes?: number;
+  mimeType?: string;
+  source?: 'device' | 'workspace';
 }
 
 export interface RecoveryCandidate {
@@ -108,6 +115,21 @@ export interface OperationRecord {
   verificationMessage: string;
   preHashes: Record<string, string>;
   postHashes: Record<string, string>;
+  userVerified?: boolean;
+  verifiedBy?: string;
+  userVerifiedAt?: string;
+  userConfirmationSignature?: string;
+  malwareScanStatus?: 'NOT_SCANNED' | 'SCANNING' | 'CLEAN' | 'THREAT_DETECTED';
+  malwareScanCompletedAt?: string;
+  malwareScanDetails?: {
+    threatsFound: number;
+    heuristicScore: number;
+    scannedSignaturesCount: number;
+    entropyCheck: string;
+    statusMessage: string;
+  };
+  finalReportId?: string;
+  finalReportGeneratedAt?: string;
 }
 
 export interface AuditLogEntry {
@@ -134,10 +156,32 @@ export interface ReportRecord {
     method: string;
     executionStatus: string;
     verificationStatus: string;
-    targets: Array<{ name: string; size: number; sha256: string; status: string }>;
+    targets: Array<{ name: string; size: number; sha256: string; status: string; savedToRecovery?: boolean }>;
     simulationDisclaimer: string;
     timestamp: string;
     deviceInfo: { appDeviceId: string; os: string; appVersion: string };
+    title?: string;
+    reportType?: string;
+    operationId?: string;
+    userVerification?: {
+      verifiedByUser: boolean;
+      verifiedBy: string;
+      verifiedAt: string;
+      signature: string;
+      statement: string;
+    };
+    malwareSafetyScan?: {
+      status: string;
+      scannedAt: string;
+      threatsFound: number;
+      heuristicScore: number;
+      entropyCheck: string;
+      result: string;
+    };
+    cryptographicIntegrity?: string;
+    operator?: { name: string; email: string; phone?: string };
+    complianceAudit?: string;
+    generatedAt?: string;
   };
 }
 

@@ -1,0 +1,683 @@
+# CIPHER LABS
+## Design and Development of an Integrated Secure Data Erasure and Advanced File Recovery Tool for Digital Forensics and Data Sanitization
+
+**Smart India Hackathon Problem Statement ID:** SIH26149
+
+**Project Tagline:** SECURE. RECOVER. VERIFY.
+
+**Project Domain:** Cybersecurity and Digital Forensics
+
+**Application Type:** Windows Desktop Application
+
+**Technology Stack:** Tauri, React, TypeScript, Python, FastAPI, MongoDB Atlas and scikit-learn
+
+---
+
+# CHAPTER 1 — INTRODUCTION AND PROBLEM ANALYSIS
+
+## 1.1 Introduction
+
+The increasing use of digital devices in education, business, healthcare and government organisations has resulted in the continuous creation and storage of digital information. Computers and storage devices contain personal documents, confidential records, business information and other sensitive data that must be managed securely throughout their lifecycle.
+
+Two important challenges in digital data management are secure data sanitization and digital file recovery. Data sanitization aims to make access to sensitive information infeasible when storage media is reused, transferred or disposed of. File recovery, on the other hand, focuses on identifying and recovering accessible or deleted files when sufficient data remains available.
+
+These objectives serve different purposes but are closely related to data security and digital forensics. A reliable system must distinguish between deleting a file, validating a recovery candidate, checking file integrity and verifying the effectiveness of a sanitization operation.
+
+**Cipher Labs** is proposed as a Windows desktop application that integrates secure-erasure workflow management, controlled file-recovery experiments, verification checks and audit-report generation. The project is designed around transparent operation statuses, controlled test environments and clear reporting of the evidence available for each result.
+
+The initial development phase focuses on simulation rather than destructive operations. This approach allows the application's workflow, verification logic, reporting features and safety controls to be evaluated without modifying real user files or claiming that physical storage media has been sanitized.
+
+## 1.2 Problem Statement
+
+Existing data-sanitization and file-recovery approaches often operate as separate tools, use different reporting methods and provide varying levels of transparency regarding the results of an operation. Users may confuse successful file deletion with secure sanitization or interpret a hash comparison as conclusive proof that data has been permanently erased.
+
+File-recovery systems can also identify candidates that are incomplete, corrupted or incorrectly classified. Without a clear validation process, users may incorrectly treat every detected file as successfully recovered.
+
+In addition, a practical application must manage authentication, user-specific records, audit history, database connectivity and error handling without exposing sensitive information. These requirements create a need for a unified application that provides a structured workflow and communicates the limitations of its verification methods.
+
+Therefore, the proposed project aims to develop **Cipher Labs, an integrated desktop application for controlled data-sanitization simulations, file-recovery research, evidence-based verification and audit-report generation**, with a phased approach to implementation and testing.
+
+## 1.3 Problem Definition
+
+The primary problem addressed by Cipher Labs is the absence of a unified and transparent workflow for demonstrating data-sanitization procedures and file-recovery validation in a controlled environment.
+
+The proposed application will combine a desktop interface, a Python-based backend, MongoDB Atlas for persistent application records and modular verification components. The backend will enforce authentication and user-specific access controls, while the application interface will clearly distinguish simulated operations from actual verification results.
+
+During the initial phases, all erasure activities will remain simulations, and recovery experiments will be restricted to application-generated test data. No real-world secure-erasure capability will be claimed unless it is separately designed, reviewed and validated.
+
+## 1.4 Objectives
+
+The major objectives of Cipher Labs are:
+
+1. To design a professional Windows desktop application for data-sanitization and digital-forensics workflows.
+2. To implement account registration and login with appropriate authentication and access controls.
+3. To integrate MongoDB Atlas for persistent storage of application metadata, operation records and audit information.
+4. To develop a simulation-based erasure workflow that does not modify real user files.
+5. To implement file identification and recovery experiments using application-generated test images.
+6. To incorporate integrity checks using cryptographic hashes where appropriate.
+7. To distinguish detected, validated and recovered files through explicit operation statuses.
+8. To generate structured JSON and PDF reports containing operation details, results and limitations.
+9. To maintain audit records that support traceability and review.
+10. To design clear error-handling behaviour for database outages and interrupted operations.
+11. To investigate local machine-learning techniques for file classification and recovery assistance in a later phase.
+12. To package the application for Windows and validate its behaviour through controlled tests.
+
+## 1.5 Scope of the Project
+
+The current project scope is limited to a Windows desktop application. A mobile application and a public informational website may be considered in future development phases.
+
+The initial implementation will focus on:
+
+- Desktop application navigation and user interface.
+- Authentication and persistent metadata storage.
+- Simulated erasure workflows.
+- Verification of simulation-specific conditions.
+- Controlled recovery experiments using generated test data.
+- Integrity checks and report generation.
+- Audit records and error handling.
+- Testing, packaging and deployment preparation.
+
+The application will not scan internal or attached drives for recovery, access raw storage devices or perform destructive erasure during the initial phases. It will not claim that a simulation demonstrates physical media sanitization.
+
+## 1.6 Significance of the Project
+
+Cipher Labs provides a structured environment for demonstrating the principles of data sanitization, digital file recovery and verification. It can help students and reviewers understand the differences between an operation being executed, its result being validated and evidence being sufficient to support a particular claim.
+
+The project also emphasises security-conscious software design through user-specific data access, controlled testing, traceable reports and explicit error states.
+
+Its educational value lies not only in the proposed functionality but also in the implementation of safeguards that prevent misleading claims about data deletion and recovery.
+
+## 1.7 Organisation of the Report
+
+This report is organised into five chapters. Chapter 1 introduces the project, defines the problem and establishes its objectives and scope. Chapter 2 reviews relevant research and existing approaches. Chapter 3 presents the proposed system architecture, technologies and modules. Chapter 4 describes the implementation approach and validation strategy. Chapter 5 summarises the project and discusses future enhancements.
+
+---
+
+# CHAPTER 2 — LITERATURE SURVEY
+
+## 2.1 Introduction
+
+The literature survey examines research and technical standards related to secure data sanitization, file recovery, digital forensics and verification. It also considers official documentation for the technologies selected for application development.
+
+The reviewed sources provide the technical foundation for the proposed system, particularly the need to distinguish deletion from sanitization, validate recovery candidates and report the limitations of software-based checks.
+
+## 2.2 Review of Existing Literature
+
+### 1. Ramaswamy Chandramouli and Eric Hibbard — *Guidelines for Media Sanitization*
+
+The National Institute of Standards and Technology (NIST) published Special Publication 800-88 Revision 2 in 2025. The document provides guidance for establishing and managing media-sanitization programmes and selecting suitable approaches based on information sensitivity and storage-media characteristics.
+
+The publication highlights the importance of choosing appropriate sanitization methods and establishing confidence in their effectiveness. It provides a standards-oriented foundation for distinguishing a proposed operation from a supported sanitization claim.
+
+**Relevance to Cipher Labs:** This guidance informs the application's conservative reporting policy. A simulation or basic file-integrity check must not be presented as proof of physical media sanitization.
+
+Reference: [1]
+
+### 2. Peter Gutmann — *Secure Deletion of Data from Magnetic and Solid-State Memory*
+
+Gutmann's research examines the challenges associated with recovering data that has supposedly been deleted from storage media. The work discusses data remanence and methods intended to make recovery more difficult.
+
+The paper provides historical context for secure deletion and demonstrates why the relationship between file deletion and data irrecoverability requires careful technical consideration.
+
+**Relevance to Cipher Labs:** The project adopts an explicit distinction between ordinary file deletion, simulated erasure and verified sanitization.
+
+Reference: [2]
+
+### 3. Michael Wei, Laura M. Grupp, Frederick E. Spada and Steven Swanson — *Reliably Erasing Data from Flash-Based Solid State Drives*
+
+This research investigates the effectiveness of data-erasure techniques on flash-based solid-state drives. The authors demonstrate that flash-memory architecture creates challenges for traditional overwriting approaches and that device-level behaviour can affect sanitization reliability.
+
+The study reinforces the importance of considering the underlying storage technology rather than assuming that a method effective for one medium will be equally effective for another.
+
+**Relevance to Cipher Labs:** The project does not claim that application-level checks can establish the complete sanitization of SSDs or other flash-based media.
+
+Reference: [3]
+
+### 4. Steven Swanson and Michael Wei — *SAFE: Fast, Verifiable Sanitization for SSDs*
+
+The SAFE research proposes an approach to SSD sanitization that combines cryptographic techniques with explicit erasure and verification. It addresses the challenges of achieving efficient sanitization while maintaining confidence in the outcome.
+
+The work illustrates that sanitization and verification are related but distinct technical requirements.
+
+**Relevance to Cipher Labs:** The project treats verification as a separate stage and requires the evidence supporting each status to be clearly identified.
+
+Reference: [4]
+
+### 5. Rainer Poisel and Simon Tjoa — *A Comprehensive Literature Review of File Carving*
+
+This literature review examines file-carving approaches used in digital forensics. File carving generally attempts to identify files using structural characteristics and content signatures, including situations where ordinary file-system metadata is unavailable.
+
+The review provides a basis for understanding the capabilities and limitations of file carving as a recovery technique.
+
+**Relevance to Cipher Labs:** Recovery candidates must be evaluated beyond initial detection, and the application should distinguish a detected candidate from a validated recovery result.
+
+Reference: [5]
+
+### 6. Nadeem Alherbawi, Zarina Shukur and Rossilawati Sulaiman — *Systematic Literature Review on Data Carving in Digital Forensic*
+
+This study reviews data-carving methods in digital forensics and discusses approaches for identifying and reconstructing files from digital storage data. File carving can be useful when file-system information is missing or insufficient, but the reliability of the result depends on the characteristics of the data and the recovery method.
+
+**Relevance to Cipher Labs:** The project separates file identification, validation and recovery output into distinct stages rather than treating detection as successful recovery.
+
+Reference: [6]
+
+### 7. Rainer Poisel, Simon Tjoa and Paul Tavolato — *Advanced File Carving Approaches for Multimedia Files*
+
+This research examines methods for recovering multimedia files, including challenges associated with fragmented content. It describes how file structure and content can be used to support recovery when ordinary file-system information is unavailable.
+
+The study demonstrates that file recovery can require specialised handling for different formats and that successful identification alone does not establish that a complete file has been reconstructed.
+
+**Relevance to Cipher Labs:** The proposed recovery module will use controlled test data and validation checks before marking a recovery result as successful.
+
+Reference: [7]
+
+### 8. Simson L. Garfinkel — *Carving Contiguous and Fragmented Files with Fast Object Validation*
+
+Garfinkel's work addresses file carving and the validation of recovered objects. Efficient validation is important because signature-based identification may produce false positives or incomplete candidates.
+
+The research supports the use of validation procedures to assess the reliability of recovered data rather than relying only on file signatures.
+
+**Relevance to Cipher Labs:** The recovery workflow will distinguish preliminary detection from validation and successful output creation.
+
+Reference: [8]
+
+### 9. Brian Carrier — *File System Forensic Analysis*
+
+Carrier's book presents concepts and techniques used in file-system forensic analysis. It covers the interpretation of file-system structures and the investigation of digital storage evidence.
+
+The book provides foundational context for understanding how file systems organise information and how forensic analysis can examine that organisation.
+
+**Relevance to Cipher Labs:** The project uses this foundation to inform its controlled approach to recovery experiments and its recognition that real-world forensic analysis involves more than filename or signature detection.
+
+Reference: [9]
+
+## 2.3 Review of Existing Approaches
+
+### 2.3.1 Data-Sanitization Tools
+
+Existing sanitization approaches may use file overwriting, device-supported sanitization commands or cryptographic erasure, depending on the storage medium and the applicable requirements.
+
+Their effectiveness depends on factors such as the underlying hardware, storage architecture, implementation quality and verification method. A tool's completion message alone should not automatically be interpreted as independent evidence that all target data has become irrecoverable.
+
+### 2.3.2 Digital File-Recovery Tools
+
+Recovery tools may use file-system metadata, file signatures, content analysis and reconstruction techniques to identify or recover files. These methods can be useful in different circumstances, but recovery results may be incomplete, corrupted or incorrectly classified.
+
+A robust workflow therefore requires validation before recovered output is treated as successful.
+
+### 2.3.3 Hash-Based Integrity Verification
+
+Cryptographic hashes provide compact representations of file contents and can be used to compare data integrity. Matching hashes support the conclusion that the compared content is consistent with the selected hash algorithm and comparison procedure.
+
+However, a hash comparison does not independently establish that deleted data is irrecoverable or that a storage device has been securely sanitized.
+
+### 2.3.4 Authentication and Persistent Data Storage
+
+Desktop applications that store account information and operation history require appropriate authentication, authorisation and data-management controls. A persistent database can support the storage of user profiles, operation metadata and audit records.
+
+In Cipher Labs, MongoDB Atlas will provide persistent data storage, while FastAPI will enforce application-level authentication and access controls. Database records must be associated with the appropriate user, and access restrictions must be implemented and tested at the backend.
+
+### 2.3.5 Reporting and Auditability
+
+Structured reports can improve traceability by recording operation identifiers, timestamps, outcomes, validation details and limitations. Reports are particularly important when users need to distinguish between an attempted operation, a completed simulation and a result supported by verification evidence.
+
+## 2.4 Research Gap
+
+The reviewed literature establishes the importance of reliable sanitization, careful file recovery and verification. However, these activities involve different procedures and assurance requirements.
+
+The project identifies the following practical design requirements for an integrated educational application:
+
+1. **Clear operation status:** The application must distinguish simulation results from actual sanitization claims.
+2. **Evidence-based verification:** Each result must state what was checked and what the check can establish.
+3. **Recovery validation:** A detected file must not automatically be labelled as recovered.
+4. **Consistent reporting:** JSON and PDF reports should communicate results and limitations in a consistent format.
+5. **User-specific access:** Persistent records must be protected by backend-enforced authentication and authorisation.
+6. **Reliable error handling:** Database outages and interrupted requests must not produce misleading success messages or fabricated zero values.
+7. **Controlled testing:** Early development should use generated test data instead of modifying real files or storage devices.
+8. **Transparent implementation status:** Planned features must be distinguished from features that have been implemented and tested.
+
+Cipher Labs addresses these requirements through a phased design focused on safe experimentation, transparent statuses, persistent records and controlled validation.
+
+## 2.5 Scope and Limitations
+
+The initial version will focus on simulation, application-generated test data, metadata storage and reporting. Real-drive sanitization and recovery are outside the current implementation scope.
+
+The project does not claim that the proposed system has already achieved production-level sanitization assurance, forensic certification or validated machine-learning performance. These claims would require separate implementation, testing and supporting evidence.
+
+---
+
+# CHAPTER 3 — SYSTEM ANALYSIS AND DESIGN
+
+## 3.1 Proposed System
+
+Cipher Labs is designed as a Windows desktop application with a React-based user interface, a Tauri desktop shell, a Python FastAPI backend and MongoDB Atlas for persistent storage.
+
+The architecture separates the presentation layer, application logic and persistent data layer. This separation supports modular development, testing and maintenance.
+
+The desktop interface will communicate with the locally running backend through a controlled API. The backend will process application requests, validate input, enforce access controls and interact with MongoDB Atlas.
+
+The application will also include modules for simulation, recovery experiments, integrity checks, reports and audit records. Machine-learning functionality is planned for a later phase and will be evaluated using generated test fixtures.
+
+## 3.2 System Architecture
+
+The proposed architecture contains the following layers:
+
+### 3.2.1 Presentation Layer
+
+The presentation layer will be developed using React, TypeScript, Vite and Tailwind CSS. It will provide navigation, forms, dashboards, operation summaries and reports.
+
+Motion for React may be used for interface transitions, while Lucide icons will provide consistent visual elements.
+
+### 3.2.2 Desktop Integration Layer
+
+Tauri will provide the Windows desktop application shell. Its capabilities and permissions will be configured according to the application's requirements.
+
+The Python backend will be packaged as a sidecar executable for deployment. The desktop application will launch the approved backend process through the configured Tauri integration, with appropriate process permissions and lifecycle handling.
+
+### 3.2.3 Backend Layer
+
+The backend will be developed using Python 3.11 and FastAPI. Pydantic will be used for request and response validation.
+
+The backend will manage authentication, application workflows, database operations, simulation checks, recovery-validation logic and report generation.
+
+### 3.2.4 Data Layer
+
+MongoDB Atlas will provide persistent storage for application records. The data model may include user profiles, operation metadata, audit events, device-assessment metadata and report references.
+
+Authentication and access control will be enforced by the backend. Database credentials will be stored in protected configuration and must not be embedded in frontend code or exposed through application logs.
+
+### 3.2.5 Local Test-Data Layer
+
+Generated test files and disk images will be stored within the application's designated data directory. Initial recovery experiments will operate only on these controlled artefacts.
+
+The application will not scan internal or attached drives or access raw physical storage devices during the initial phases.
+
+## 3.3 Technology Stack
+
+| Component | Technology | Purpose |
+|---|---|---|
+| Desktop framework | Tauri v2 | Windows desktop shell |
+| Frontend | React and TypeScript | User interface and application workflows |
+| Build tool | Vite | Frontend development and build process |
+| Styling | Tailwind CSS | Consistent interface styling |
+| Animation | Motion for React | Interface transitions |
+| Icons | Lucide React | Interface icons |
+| Backend | Python 3.11 and FastAPI | API and application logic |
+| Validation | Pydantic v2 | Request and response validation |
+| Database | MongoDB Atlas | Persistent application records |
+| Machine learning | scikit-learn | Planned local classification experiments |
+| PDF reporting | ReportLab | PDF report generation |
+| Packaging | PyInstaller and NSIS | Backend packaging and Windows installer |
+
+The technologies listed above represent the selected or planned project stack. Their inclusion in the design does not, by itself, establish that every component has been implemented or tested.
+
+## 3.4 Functional Modules
+
+### 3.4.1 Authentication Module
+
+This module will provide account registration and login. It will validate user input and protect access to user-specific application records.
+
+Authentication methods, including password-based login and optional Google sign-in, will depend on the configured and tested implementation. The backend must enforce authorisation independently of the frontend interface.
+
+### 3.4.2 Dashboard Module
+
+The dashboard will present a summary of application activity, including total operations, eligible verification results, device assessments and recovery scans.
+
+Simulations will be displayed separately from actual verified outcomes. Before recovery scanning is enabled, the dashboard should communicate that the feature is unavailable rather than imply that completed scans exist.
+
+### 3.4.3 Secure Erasure Simulation Module
+
+This module will demonstrate the structure of an erasure workflow without modifying real user files or physical storage devices.
+
+The operation label will be **Simulation**. The module will report only the results of its defined checks and will not use terms such as “Erased,” “Sanitized” or “Destroyed” to describe a simulated operation.
+
+The result will clearly communicate that no physical erasure was performed.
+
+### 3.4.4 File Recovery Module
+
+The recovery module will be introduced using application-generated test files and disk images. It will demonstrate candidate identification, validation and output handling.
+
+Recovery candidates will use the statuses “Detected” or “Validated” until output has been written and re-validated. The status “Recovered” will be used only when the defined recovery and validation conditions have been satisfied.
+
+### 3.4.5 Verification Centre
+
+The verification centre will present the checks associated with each operation and their results.
+
+Simulation checks will use the statuses `SIMULATION_CHECK_PASSED` and `SIMULATION_CHECK_FAILED`.
+
+The interface will display the following message when a simulation check passes:
+
+“Simulation check passed. No file changes were detected. This is not physical erasure verification.”
+
+When a simulation check fails, the interface will display:
+
+“Simulation check failed. A file change was detected. Review the details before doing anything else.”
+
+The verification centre will not present a hash match as proof of secure erasure.
+
+### 3.4.6 Reports and Audit Module
+
+The reporting module will generate structured JSON and PDF reports. Reports will include relevant operation metadata, timestamps, statuses, verification results and limitations.
+
+Audit records will support traceability of application events. Sensitive information, passwords, access tokens and database credentials must not be included in ordinary logs or reports.
+
+### 3.4.7 Device Metadata Module
+
+The device module will record only the information required for application identification and assessment, such as the operating-system name, operating-system version, application version and an application-generated device identifier.
+
+Unnecessary hardware identifiers will not be collected.
+
+### 3.4.8 Settings and Privacy Module
+
+This module will provide application preferences and relevant privacy settings. Since the current deliverable is a desktop application, website cookie-consent functionality is not required.
+
+### 3.4.9 Offline Synchronisation Module
+
+A limited metadata queue may be introduced in a later phase to support operations during temporary connectivity interruptions.
+
+The queue will not function as a general-purpose local database. Pending entries will be removed individually after successful, idempotent synchronisation with the backend. The implementation will be tested for duplicate submissions and interrupted requests.
+
+## 3.5 System Workflow
+
+The proposed workflow is as follows:
+
+1. The user launches Cipher Labs.
+2. The application initialises its desktop interface and local backend connection.
+3. The user authenticates through a configured login method.
+4. The backend validates the request and applies access controls.
+5. The user selects a supported simulation or test-data workflow.
+6. The backend processes the request within the defined safety boundaries.
+7. The application performs the relevant simulation or recovery-validation checks.
+8. The result is assigned a status that accurately reflects the evidence.
+9. Relevant metadata and audit events are stored when the database is available.
+10. The user reviews the result and generates a JSON or PDF report.
+
+Database connectivity errors must be reported explicitly. The application should display “Unavailable” with a retry option when a value cannot be retrieved, rather than displaying a misleading zero.
+
+## 3.6 Security and Privacy Considerations
+
+The proposed system will incorporate the following controls:
+
+- Backend-enforced authentication and user-specific authorisation.
+- Input validation and appropriate error responses.
+- Protected database configuration and credentials.
+- Restricted desktop-sidecar permissions.
+- Localhost-only backend binding at `127.0.0.1:8765`.
+- Controlled access to the application's designated data directory.
+- No real-drive scanning or destructive erasure in the initial phases.
+- Minimal collection of device metadata.
+- Clear separation between simulations and actual verification.
+- Audit logging that excludes secrets.
+- Explicit handling of unavailable database records.
+- Testing of duplicate and interrupted synchronisation requests.
+
+These controls must be verified through implementation and testing before the application is described as secure or production-ready.
+
+---
+
+# CHAPTER 4 — IMPLEMENTATION AND TESTING
+
+## 4.1 Implementation Strategy
+
+Cipher Labs will be developed incrementally to make the architecture easier to test and to reduce the risk of unsafe operations.
+
+The implementation is divided into four phases. Each phase has its own deliverables and validation requirements. Features will be reported as completed only after the relevant implementation and tests provide supporting evidence.
+
+## 4.2 Phase 0 — Environment and Application Foundation
+
+Phase 0 establishes the development environment and application structure.
+
+The planned tasks include:
+
+1. Preparing the frontend and backend project structure.
+2. Configuring the Tauri desktop application.
+3. Establishing the FastAPI application entry point.
+4. Implementing a backend health endpoint.
+5. Configuring MongoDB Atlas connectivity without exposing credentials.
+6. Configuring the desktop-sidecar integration and permissions.
+7. Preparing the Windows packaging configuration.
+8. Verifying configuration and startup behaviour.
+
+**Expected outcome:** A reproducible application foundation with a working desktop-to-backend communication path and a documented configuration process.
+
+Completion will be established through startup tests, health checks and verified build results.
+
+## 4.3 Phase 1 — Authentication, Database and Simulation
+
+Phase 1 introduces the core application workflows.
+
+### 4.3.1 Authentication and Database Integration
+
+The backend will implement the configured authentication mechanism and enforce access to user-specific records. MongoDB Atlas will store persistent application metadata and operation history.
+
+The data model will use appropriate document structures, indexes and uniqueness constraints where required. Access restrictions will be implemented in the backend rather than relying on frontend navigation alone.
+
+### 4.3.2 Dashboard Development
+
+The dashboard will present the application's available metrics and distinguish simulations from eligible verification results. Unavailable features and unavailable database data will be represented explicitly.
+
+### 4.3.3 Simulation Workflow
+
+The simulation module will demonstrate the sequence of an erasure operation without changing real files. The application will record the simulated target and the results of its checks.
+
+The report will explicitly state:
+
+“This is a simulation. No physical erasure was performed. The check confirms only that the simulated targets were not changed.”
+
+### 4.3.4 Integrity Checks
+
+Hash-based comparison may be used to evaluate the consistency of test data. The report will identify the data being compared and the purpose of the comparison.
+
+A matching hash will be interpreted as an integrity result, not as proof that all copies of a file have been erased.
+
+### 4.3.5 Report Generation
+
+The application will generate JSON and PDF reports from available operation metadata. The generated report must accurately reflect the recorded status and must not convert simulated results into actual sanitization claims.
+
+**Expected outcome:** An initial application containing authentication, database-backed records, dashboard functionality, controlled simulation workflows and basic reporting, subject to successful implementation and testing.
+
+## 4.4 Phase 2 — Test-Image Recovery and Machine Learning
+
+Phase 2 will introduce controlled recovery experiments.
+
+### 4.4.1 Test-Image Generation
+
+The application will generate or use designated test images within its application-data directory. These images will contain known test content so that recovery results can be evaluated against expected outcomes.
+
+### 4.4.2 File Identification
+
+The recovery component will examine the approved test data for supported file signatures or other defined identification features.
+
+Candidate detection will not be treated as conclusive evidence of successful recovery.
+
+### 4.4.3 Recovery Validation
+
+Recovery candidates will be checked using defined structural or integrity conditions. A candidate will be marked “Recovered” only after the required output has been written and re-validated.
+
+### 4.4.4 Local Machine Learning
+
+scikit-learn may be used to evaluate local classification techniques on generated test fixtures. The model's purpose, input features, dataset composition and limitations will be documented.
+
+Model performance will be assessed using suitable metrics such as precision, recall and F1-score. These metrics will be calculated from test results rather than estimated or assumed.
+
+**Expected outcome:** A controlled test-image recovery workflow and an experimentally evaluated local classification component, provided the relevant features are implemented successfully.
+
+## 4.5 Phase 3 — Packaging and Reliability
+
+Phase 3 focuses on deployment and reliability.
+
+The planned activities include:
+
+1. Packaging the Python backend using PyInstaller.
+2. Configuring the Tauri sidecar integration.
+3. Preparing a Windows installer using NSIS.
+4. Implementing the limited metadata-only offline queue.
+5. Testing idempotent synchronisation.
+6. Testing retry and database-outage behaviour.
+7. Checking that credentials are not embedded in frontend assets or logs.
+8. Validating the installer and application on a clean Windows test environment.
+
+**Expected outcome:** A deployable Windows application with tested startup, packaging, error handling and synchronisation behaviour.
+
+## 4.6 Testing and Validation Strategy
+
+Testing will be performed at several levels.
+
+### 4.6.1 Unit Testing
+
+Unit tests will evaluate individual functions, including input validation, status assignment, hash comparison, report formatting and recovery-validation rules.
+
+### 4.6.2 Integration Testing
+
+Integration tests will verify communication between the desktop application, backend API and MongoDB Atlas. Tests will include successful requests, invalid requests and database-unavailable scenarios.
+
+### 4.6.3 Functional Testing
+
+Functional testing will examine login, dashboard navigation, simulation execution, verification results, report generation and other implemented workflows.
+
+### 4.6.4 Security Testing
+
+Security testing will assess access-control enforcement, input validation, secret handling, restricted process permissions and the application's handling of user-specific records.
+
+### 4.6.5 Recovery Testing
+
+Recovery tests will use generated test files and application-created test images. Known inputs and expected results will be used to evaluate candidate identification and output validation.
+
+### 4.6.6 Packaging Testing
+
+Packaging tests will verify that the application launches correctly from the generated Windows installer and that the backend sidecar is available when required.
+
+## 4.7 Test Case Specification
+
+The following table defines proposed test cases. Their results must be recorded after execution.
+
+| Test ID | Test scenario | Expected result |
+|---|---|---|
+| TC-01 | Start the backend | Health endpoint responds successfully |
+| TC-02 | Submit invalid authentication input | Request is rejected appropriately |
+| TC-03 | Access another user's records | Backend denies unauthorised access |
+| TC-04 | Run an erasure simulation | No real user files are modified |
+| TC-05 | Perform a simulation check | Correct simulation-specific status is displayed |
+| TC-06 | Compare test-file hashes | Integrity comparison result is reported accurately |
+| TC-07 | Detect a recovery candidate | Candidate is labelled “Detected” |
+| TC-08 | Validate recovery output | Status advances only when validation requirements are satisfied |
+| TC-09 | Generate a report | Report reflects the recorded operation and limitations |
+| TC-10 | Make the database unavailable | Interface displays an appropriate unavailable state |
+| TC-11 | Retry a synchronisation request | Duplicate records are avoided through idempotent handling |
+| TC-12 | Launch the packaged application | Desktop application and required backend start correctly |
+
+The test table describes expected behaviour, not completed test results. Actual outcomes, evidence and corrective actions should be added to the final report after execution.
+
+## 4.8 Implementation Limitations
+
+The initial implementation is deliberately restricted to non-destructive simulations and generated test data. Consequently, it cannot be presented as a complete real-world secure-erasure or forensic-recovery solution.
+
+A passing simulation check establishes only that the specified simulation conditions were satisfied. It does not establish that data on a physical storage device has been sanitized.
+
+Similarly, hash comparisons provide evidence about the consistency of compared data but do not independently establish the irrecoverability of deleted information.
+
+Flash-based storage may retain data in locations that are not directly represented by ordinary file-level operations. Therefore, physical sanitization claims require methods and evidence appropriate to the storage medium.
+
+---
+
+# CHAPTER 5 — CONCLUSION AND FUTURE ENHANCEMENTS
+
+## 5.1 Conclusion
+
+Cipher Labs is proposed as a Windows desktop application that brings together data-sanitization simulations, controlled file-recovery experiments, verification checks and audit-report generation.
+
+The project addresses the need for transparent status reporting and careful interpretation of technical evidence. Its design separates operation execution, validation and reporting so that users can understand what was performed and what the resulting evidence supports.
+
+The proposed architecture combines Tauri, React, TypeScript, FastAPI and MongoDB Atlas. A phased development process is intended to establish the application foundation before introducing simulation workflows, test-image recovery, machine-learning experiments and Windows packaging.
+
+A central design principle is that the application must not claim that a simulation proves physical erasure. Likewise, detected recovery candidates must not be presented as successfully recovered files until the defined validation requirements have been satisfied.
+
+The project's progress and final effectiveness will depend on successful implementation, documented test results and evidence that the expected behaviour has been achieved. The report therefore distinguishes the proposed design from functionality that has actually been implemented and verified.
+
+## 5.2 Future Enhancements
+
+Potential future enhancements include:
+
+1. Extending the recovery module to support additional file formats within controlled test environments.
+2. Improving recovery-candidate validation and classification using experimentally evaluated machine-learning models.
+3. Adding richer audit-report filtering and export capabilities.
+4. Improving usability and accessibility across the desktop interface.
+5. Expanding automated integration and reliability testing.
+6. Evaluating additional authentication options after the required integrations have been configured and tested.
+7. Conducting a separate technical and safety review before considering any real-device sanitization functionality.
+8. Evaluating standards-aligned sanitization methods and appropriate independent verification procedures before making claims about physical media.
+
+Any future expansion into real-device operations must undergo separate design, safety assessment and validation. It is not included in the current implementation scope.
+
+---
+
+# REFERENCES
+
+The following references use a numbered academic format. Research publications are listed separately from official technical documentation. Online sources were checked during preparation; access dates and bibliographic details should be finalised according to the institution's prescribed citation style.
+
+## A. Research Papers, Standards and Books
+
+**[1]** R. Chandramouli and E. Hibbard, *Guidelines for Media Sanitization*, NIST Special Publication 800-88 Revision 2. National Institute of Standards and Technology, September 2025.  
+https://doi.org/10.6028/NIST.SP.800-88r2
+
+**[2]** P. Gutmann, “Secure Deletion of Data from Magnetic and Solid-State Memory,” in *Proceedings of the 6th USENIX Security Symposium*, 1996.  
+https://www.usenix.org/conference/6th-usenix-security-symposium/secure-deletion-data-magnetic-and-solid-state-memory
+
+**[3]** M. Wei, L. Grupp, F. E. Spada, and S. Swanson, “Reliably Erasing Data from Flash-Based Solid State Drives,” in *Proceedings of the 9th USENIX Conference on File and Storage Technologies (FAST ’11)*, 2011.  
+https://www.usenix.org/conference/fast11/reliably-erasing-data-flash-based-solid-state-drives
+
+**[4]** S. Swanson and M. Wei, “SAFE: Fast, Verifiable Sanitization for SSDs,” University of California, San Diego, 2011.  
+https://escholarship.org/uc/item/7s6184dq
+
+**[5]** R. Poisel and S. Tjoa, “A Comprehensive Literature Review of File Carving,” in *Proceedings of the 8th International Conference on Availability, Reliability and Security (ARES)*, 2013.  
+https://doi.org/10.1109/ARES.2013.62
+
+**[6]** N. Alherbawi, Z. Shukur, and R. Sulaiman, “Systematic Literature Review on Data Carving in Digital Forensic,” *Procedia Technology*, vol. 11, pp. 1064–1069, 2013.  
+https://doi.org/10.1016/j.protcy.2013.12.165
+
+**[7]** R. Poisel, S. Tjoa, and P. Tavolato, “Advanced File Carving Approaches for Multimedia Files,” *Journal of Wireless Mobile Networks, Ubiquitous Computing, and Dependable Applications*, vol. 2, no. 4, pp. 42–58, 2011.  
+https://doi.org/10.22667/JOWUA.2011.12.31.042
+
+**[8]** S. L. Garfinkel, “Carving Contiguous and Fragmented Files with Fast Object Validation,” *Digital Investigation*, vol. 4, Supplement, pp. 2–12, 2007.  
+https://doi.org/10.1016/j.diin.2007.06.017
+
+**[9]** B. Carrier, *File System Forensic Analysis*. Addison-Wesley Professional, 2005.  
+https://www.informit.com/store/file-system-forensic-analysis-9780134439556
+
+## B. Official Technology Documentation
+
+**[10]** Tauri Contributors, “Tauri Documentation: Building Desktop Applications, Sidecar Integration, Permissions and Bundling.”  
+https://v2.tauri.app/
+
+**[11]** Meta Platforms, Inc. and the React Contributors, “React Documentation.”  
+https://react.dev/
+
+**[12]** FastAPI Contributors, “FastAPI Documentation.”  
+https://fastapi.tiangolo.com/
+
+**[13]** MongoDB, Inc., “MongoDB Documentation.”  
+https://www.mongodb.com/docs/
+
+**[14]** The scikit-learn Developers, “scikit-learn: Machine Learning in Python — User Guide.”  
+https://scikit-learn.org/stable/
+
+**[15]** Python Software Foundation, “Python Documentation.”  
+https://docs.python.org/3/
+
+**[16]** ReportLab, “ReportLab Documentation.”  
+https://docs.reportlab.com/
+
+**[17]** Tailwind Labs, “Tailwind CSS Documentation.”  
+https://tailwindcss.com/docs
+
+**[18]** Vite Contributors, “Vite Documentation.”  
+https://vite.dev/guide/
+
+**[19]** Microsoft, “Windows App Development Documentation.”  
+https://learn.microsoft.com/en-us/windows/apps/
+
+## C. Project-Specific Reference
+
+**[20]** Smart India Hackathon, *Problem Statement SIH26149: Design and Development of an Integrated Secure Data Erasure and Advanced File Recovery Tool for Digital Forensics and Data Sanitization*. Official problem-statement material supplied for the project.
+
+**Reference note:** Before final submission, verify the complete bibliographic metadata for references [5]–[8] against the publisher records or original papers. Use the exact version of the SIH problem statement supplied by the organising body for reference [20].

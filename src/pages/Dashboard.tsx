@@ -22,36 +22,71 @@ import {
   Inbox,
   Lock,
 } from 'lucide-react';
-import { OperationRecord, ReportRecord, UserProfile } from '../types';
+import { OperationRecord, RecoveryCopyRecord, ReportRecord, UserProfile } from '../types';
+import { StorageService } from '../services/storage';
 import { NavTab } from '../components/Sidebar';
 
 interface DashboardProps {
   operations: OperationRecord[];
   reports: ReportRecord[];
+  recoveryCopies?: RecoveryCopyRecord[];
   profile: UserProfile;
   isDark: boolean;
   onNavigate: (tab: NavTab) => void;
-  onOpenBrowseFiles: () => void;
   onViewReport: (report: ReportRecord) => void;
 }
+
+const getDeletedFileName = (op: OperationRecord): string => {
+  if (op.preHashes && Object.keys(op.preHashes).length > 0) {
+    return Object.keys(op.preHashes).join(', ');
+  }
+  if (op.targetReference) {
+    const cleaned = op.targetReference.replace(/^\d+\s+device\s+file\(s\):\s*/i, '');
+    if (cleaned) return cleaned;
+  }
+  if (op.method && !op.method.includes('NIST') && !op.method.includes('DoD') && !op.method.includes('BSI')) {
+    return op.method;
+  }
+  return 'Deleted File';
+};
+
+const getReportDeletedFileName = (rep: ReportRecord): string => {
+  if (rep.reportJson?.targets && Array.isArray(rep.reportJson.targets) && rep.reportJson.targets.length > 0) {
+    const names = rep.reportJson.targets.map((t: any) => t.name).filter(Boolean);
+    if (names.length > 0) return names.join(', ');
+  }
+  if (rep.reportJson?.title && !rep.reportJson.title.includes('NIST') && !rep.reportJson.title.includes('Full Verified')) {
+    return rep.reportJson.title;
+  }
+  if (rep.reportJson?.method && !rep.reportJson.method.includes('NIST') && !rep.reportJson.method.includes('DoD') && !rep.reportJson.method.includes('BSI')) {
+    return rep.reportJson.method;
+  }
+  return 'Deleted File Report';
+};
 
 export const Dashboard: React.FC<DashboardProps> = ({
   operations,
   reports,
+  recoveryCopies,
   profile,
   isDark,
   onNavigate,
-  onOpenBrowseFiles,
   onViewReport,
 }) => {
   // Metric calculations strictly per specifications:
   // TOTAL OPERATIONS: all operations (simulations included)
   const totalOperations = operations.length;
 
-  // VERIFIED OPERATIONS: ONLY operations whose verification_status is VERIFIED; simulations are EXCLUDED!
-  const verifiedOperations = operations.filter(
-    (op) => op.verificationStatus === 'VERIFIED'
+  // VERIFIED OPERATIONS: Automatically tracks operations verified by the user (both secure deletions & restorations)
+  const verifiedDeletions = operations.filter(
+    (op) => op.userVerified === true || op.verificationStatus === 'VERIFIED' || op.verificationStatus === 'SIMULATION_CHECK_PASSED'
   ).length;
+
+  const verifiedRestorations = (recoveryCopies || StorageService.getRecoveryCopies()).filter(
+    (copy) => copy.status === 'VERIFIED' || copy.status === 'RESTORED'
+  ).length;
+
+  const verifiedOperations = verifiedDeletions + verifiedRestorations;
 
   // DEVICES ASSESSED: registered devices (1 local registered workstation)
   const devicesAssessed = 1;
@@ -177,7 +212,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-3xl font-extrabold tracking-tight text-[#16A34A]">
               {verifiedOperations}
             </span>
-            <span className="text-xs text-slate-400">hardware validated</span>
+            <span className="text-xs text-slate-400">
+              user verified ({verifiedDeletions} deleted, {verifiedRestorations} restored)
+            </span>
           </div>
         </div>
 
@@ -277,20 +314,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <ArrowRight className="w-4 h-4 text-purple-400" />
               </button>
 
-              <button
-                onClick={onOpenBrowseFiles}
-                className={`w-full flex items-center justify-between p-3 rounded-lg text-left text-xs font-semibold border transition-all ${
-                  isDark
-                    ? 'border-slate-700 hover:bg-slate-800 text-slate-200'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <FolderOpen className="w-4 h-4 text-cyan-500" />
-                  <span>Browse Test Files</span>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono">5 items</span>
-              </button>
+
 
               <button
                 onClick={() => onNavigate('verification')}
@@ -359,9 +383,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             ) : (
               <div className="space-y-2.5">
-                {recentOperations.map((op) => (
+                {recentOperations.map((op, idx) => (
                   <div
-                    key={op.id}
+                    key={`${op.id}-${idx}`}
                     className={`p-3 rounded-lg border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
                       isDark
                         ? 'bg-[#0B1F3A]/60 border-[#1E3A5F] hover:bg-[#0B1F3A]'
@@ -377,10 +401,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         )}
                       </div>
                       <div>
-                        <div className="font-semibold text-slate-200 dark:text-slate-200">
-                          {op.method}
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-xs">
+                          {getDeletedFileName(op)}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono mt-0.5 truncate max-w-xs">
                           {op.targetReference}
                         </div>
                       </div>
@@ -396,9 +420,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-inherit mt-4 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="pt-4 border-t border-inherit mt-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
             <span>Audit Trail Ledger</span>
-            <span className="font-mono text-cyan-500">Chained SHA-256 HMAC</span>
+            <span className="font-mono text-cyan-600 dark:text-cyan-400 font-semibold">Chained SHA-256 HMAC</span>
           </div>
         </div>
       </div>
@@ -412,25 +436,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <FileText className="w-4 h-4 text-cyan-500" />
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
               Latest Reports
             </h3>
           </div>
           <button
             onClick={() => onNavigate('reports')}
-            className="text-xs text-cyan-500 hover:underline font-semibold"
+            className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline font-semibold"
           >
             View all reports
           </button>
         </div>
 
         {latestReports.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">No reports generated yet.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">No reports generated yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {latestReports.map((rep) => (
+            {latestReports.map((rep, idx) => (
               <div
-                key={rep.id}
+                key={`${rep.id}-${idx}`}
                 className={`p-4 rounded-xl border flex flex-col justify-between ${
                   isDark
                     ? 'bg-[#0B1F3A]/70 border-[#1E3A5F]'
@@ -439,14 +463,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               >
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-semibold text-cyan-400 truncate">
-                      {rep.reportJson.method}
+                    <span className="font-semibold text-cyan-700 dark:text-cyan-400 truncate">
+                      {getReportDeletedFileName(rep)}
                     </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400">
                       {rep.reportStatus}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 line-clamp-2">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
                     {rep.reportJson.simulationDisclaimer}
                   </p>
                   <p className="text-[10px] font-mono text-slate-500 mt-2">
@@ -455,12 +479,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-inherit flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
                     {new Date(rep.createdAt).toLocaleDateString()}
                   </span>
                   <button
                     onClick={() => onViewReport(rep)}
-                    className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                    className="inline-flex items-center gap-1 text-xs text-cyan-700 hover:text-cyan-800 dark:text-cyan-400 dark:hover:text-cyan-300 font-semibold"
                   >
                     <Download className="w-3 h-3" />
                     <span>View / Export</span>

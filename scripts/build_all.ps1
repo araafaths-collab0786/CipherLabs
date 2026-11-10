@@ -12,13 +12,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ">>> STEP 2: Loading Configuration & Exporting Build-Time Environment..." -ForegroundColor Cyan
-$supabaseEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\supabase.env"
-if (-not (Test-Path $supabaseEnvFile)) {
-    $supabaseEnvFile = Join-Path $PSScriptRoot "..\.env"
+$mongoEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\mongodb.env"
+if (-not (Test-Path $mongoEnvFile)) {
+    $mongoEnvFile = Join-Path $PSScriptRoot "..\.env"
 }
 
-if (Test-Path $supabaseEnvFile) {
-    Get-Content $supabaseEnvFile | ForEach-Object {
+if (Test-Path $mongoEnvFile) {
+    Get-Content $mongoEnvFile | ForEach-Object {
         $line = $_.Trim()
         if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
             $parts = $line.Split('=', 2)
@@ -27,9 +27,9 @@ if (Test-Path $supabaseEnvFile) {
             [System.Environment]::SetEnvironmentVariable($name, $val, [System.EnvironmentVariableTarget]::Process)
         }
     }
-    Write-Host "  Loaded environment variables into caller process." -ForegroundColor Green
+    Write-Host "  Loaded MongoDB Atlas & JWT environment variables into caller process." -ForegroundColor Green
 } else {
-    Write-Host "  No supabase.env found. Packaging in CONFIG_MISSING mode." -ForegroundColor Yellow
+    Write-Host "  No mongodb.env found. Packaging in CONFIG_MISSING mode." -ForegroundColor Yellow
 }
 
 Write-Host ">>> STEP 3: Building Backend Sidecar Executable..." -ForegroundColor Cyan

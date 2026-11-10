@@ -15,8 +15,8 @@ use tauri_plugin_shell::{
 struct Backend(Mutex<Option<CommandChild>>);
 
 // Compile-time credentials, injected during build_all.ps1 / build_backend.ps1
-const SUPABASE_URL: Option<&str> = option_env!("CIPHER_SUPABASE_URL");
-const SUPABASE_ANON_KEY: Option<&str> = option_env!("CIPHER_SUPABASE_ANON_KEY");
+const MONGODB_URI: Option<&str> = option_env!("CIPHER_MONGODB_URI");
+const JWT_SECRET: Option<&str> = option_env!("CIPHER_JWT_SECRET");
 
 fn main() {
     env_logger::init();
@@ -29,15 +29,18 @@ fn main() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
 
-            log::info!("Starting Cipher Labs FastAPI sidecar engine...");
+            log::info!("Starting Cipher Labs FastAPI sidecar engine with MongoDB Atlas...");
 
             let mut cmd = app
                 .shell()
                 .sidecar("cipher-backend")?
                 .env("CIPHER_APP_DATA", data_dir.to_string_lossy().to_string());
 
-            if let (Some(url), Some(key)) = (SUPABASE_URL, SUPABASE_ANON_KEY) {
-                cmd = cmd.env("SUPABASE_URL", url).env("SUPABASE_ANON_KEY", key);
+            if let Some(uri) = MONGODB_URI {
+                cmd = cmd.env("MONGODB_URI", uri);
+            }
+            if let Some(jwt) = JWT_SECRET {
+                cmd = cmd.env("JWT_SECRET", jwt);
             }
 
             let (mut rx, child) = cmd.spawn()?;

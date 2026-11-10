@@ -21,9 +21,9 @@ Reconciled Corrections:
 
 ### Stack
 - Desktop shell: Tauri v2 (Rust 1.90+, `tauri`, `tauri-plugin-shell`, and `tauri-plugin-deep-link` v2).
-- Frontend: React 18/19, TypeScript (strict), Vite, Tailwind CSS, Motion for React, lucide-react, @supabase/supabase-js.
-- Local backend: Python 3.11, FastAPI, Pydantic v2, uvicorn, packaged with PyInstaller as a Tauri sidecar.
-- Database, authentication, and authorisation: Supabase only (PostgreSQL, Supabase Auth, Row Level Security).
+- Frontend: React 18/19, TypeScript (strict), Vite, Tailwind CSS, Motion for React, lucide-react.
+- Local backend: Python 3.11, FastAPI, Pydantic v2, uvicorn, Motor async driver, PyMongo, packaged with PyInstaller as a Tauri sidecar (`127.0.0.1:8765`).
+- Database, authentication, and authorisation: MongoDB Atlas (MongoDB Server 7.0+ cluster via `mongodb+srv://`) + FastAPI JWT HS256 + Bcrypt.
 - Machine learning (Phase 2): scikit-learn RandomForestClassifier on synthetic disk fixtures.
 
 ### Scope of this Release
@@ -80,33 +80,30 @@ Reconciled Corrections:
 
 ---
 
-## PART 5 - DATABASE SCHEMA & CRYPTOGRAPHIC AUDIT
+## PART 5 - DATABASE SCHEMA & CRYPTOGRAPHIC AUDIT (MONGODB ATLAS)
 
-### 5.1 Profiles & Trigger (0001_profiles_trigger.sql)
-Creates `public.profiles` and `handle_new_user()` security definer trigger on `auth.users`.
+### 5.1 MongoDB Collections & Tenant Scoping
+- Collections: `users`, `devices`, `operations`, `reports`, `audit_ledger`, `recovery_copies`.
+- Every query, update, and insert in the FastAPI sidecar is strictly scoped by `current_user["id"]` decoded from the verified JWT.
 
-### 5.2 Grants, Controlled Audit Function & RLS (0002_rls.sql)
-- RLS enabled on all tables (`profiles`, `devices`, `operations`, `operation_events`, `reports`, `audit_log`).
-- `audit_log` direct `INSERT`, `UPDATE`, and `DELETE` privileges are REVOKED from `authenticated` and `anon`.
-- Audit entries are inserted ONLY via the security-definer stored procedure:
-  ```sql
-  create or replace function public.log_audit_event(
-    p_action text,
-    p_operation_id uuid,
-    p_safe_details jsonb
-  ) returns bigint;
-  ```
-- This function computes:
-  `entry_hash = encode(sha256((coalesce(last_hash, 'GENESIS') || p_action || canonical_json)::bytea), 'hex')`
-  ensuring tamper-proof append-only integrity.
+### 5.2 Compound Unique Index Idempotency
+- Compound unique indexes enforced via Motor client:
+  - `reports`: Unique index on `("user_id", 1), ("idempotency_key", 1)`
+  - `operations`: Unique index on `("user_id", 1), ("idempotency_key", 1)`
+  - `users`: Unique index on `("email", 1)`
+- Guarantees complete idempotency and prevents duplicate sync or report generation.
 
-### 5.3 Tables & Constraints (0003_tables.sql)
-- `reports` table includes:
-  `idempotency_key text not null`
-  `unique (user_id, idempotency_key)`
-- `operations` table enforces:
-  `check ((operation_type = 'ERASURE_SIMULATION') = (mode = 'SIMULATION_ONLY'))`
-  `check ((operation_type = 'ERASURE_SIMULATION' and verification_status in ('SIMULATION_CHECK_PASSED', 'SIMULATION_CHECK_FAILED', 'UNVERIFIED', 'NOT_APPLICABLE')) or (operation_type = 'RECOVERY_TEST' and verification_status in ('VERIFIED', 'VERIFICATION_FAILED', 'UNVERIFIED', 'NOT_APPLICABLE')))`
+### 5.3 Tamper-Proof Hash-Chained Audit Ledger
+- Append-only collection `audit_ledger`.
+- Hash computation per event:
+  `entry_hash = sha256(previous_hash + action + operation_id + canonical_json)`
+- Initialized with Genesis block hash (`GENESIS_BLOCK_CIPHER_LABS_V1_INIT`).
+- Cryptographic verification endpoint `GET /api/audit/verify-chain` verifies whole chain continuity.
+
+### 5.4 Safety Constraints
+- `operations` documents enforce:
+  - `mode == "SIMULATION_ONLY"` for all `ERASURE_SIMULATION` actions.
+  - Allowed verification statuses: `SIMULATION_CHECK_PASSED`, `SIMULATION_CHECK_FAILED`, `UNVERIFIED`, `NOT_APPLICABLE`.
 
 ---
 
