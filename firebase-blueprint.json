@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and configuration preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "firstName": { "type": "string", "maxLength": 100 },
+        "lastName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 255 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "firstName", "lastName", "email"]
+    },
+    "OperationRecord": {
+      "title": "OperationRecord",
+      "description": "Permanent file deletion or recovery operation log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "operationType": { "type": "string", "maxLength": 50 },
+        "mode": { "type": "string", "maxLength": 50 },
+        "targetReference": { "type": "string", "maxLength": 500 },
+        "method": { "type": "string", "maxLength": 100 },
+        "executionStatus": { "type": "string", "maxLength": 50 },
+        "verificationStatus": { "type": "string", "maxLength": 50 },
+        "trackingState": { "type": "string", "maxLength": 50 },
+        "idempotencyKey": { "type": "string", "maxLength": 128 },
+        "targetCount": { "type": "number" },
+        "hasRecoveryCopy": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "verificationMessage": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["id", "userId", "operationType", "executionStatus", "verificationStatus", "createdAt"]
+    },
+    "RecoveryCopyRecord": {
+      "title": "RecoveryCopyRecord",
+      "description": "Metadata for recovery copy backups created prior to deletion",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "operationId": { "type": "string", "maxLength": 128 },
+        "originalFileName": { "type": "string", "maxLength": 255 },
+        "originalWorkspacePath": { "type": "string", "maxLength": 500 },
+        "recoveryVaultPath": { "type": "string", "maxLength": 500 },
+        "originalSha256": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "operationId", "originalFileName", "createdAt", "status"]
+    },
+    "ReportRecord": {
+      "title": "ReportRecord",
+      "description": "Generated cryptographic deletion report record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "operationId": { "type": "string", "maxLength": 128 },
+        "idempotencyKey": { "type": "string", "maxLength": 128 },
+        "reportStatus": { "type": "string", "maxLength": 50 },
+        "reportSha256": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "operationId", "reportStatus", "reportSha256", "createdAt"]
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Tamper-evident audit trail log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "operationId": { "type": "string", "maxLength": 128 },
+        "previousHash": { "type": "string", "maxLength": 64 },
+        "entryHash": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "action", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents keyed by Auth UID"
+    },
+    "/operations/{operationId}": {
+      "schema": "OperationRecord",
+      "description": "Operation execution records keyed by operation ID"
+    },
+    "/recovery_copies/{copyId}": {
+      "schema": "RecoveryCopyRecord",
+      "description": "Recovery copy records keyed by copy ID"
+    },
+    "/reports/{reportId}": {
+      "schema": "ReportRecord",
+      "description": "Deletion reports keyed by report ID"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLogEntry",
+      "description": "Audit log entries keyed by log ID"
+    }
+  }
+}

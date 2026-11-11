@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'firstName', 'lastName', 'email'])
+        && data.keys().hasOnly(['id', 'firstName', 'lastName', 'email', 'phone', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.firstName is string && data.firstName.size() <= 100
+        && data.lastName is string && data.lastName.size() <= 100
+        && data.email is string && data.email.size() <= 255
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 50))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64));
+    }
+
+    function isValidOperationRecord(data) {
+      return data.keys().hasAll(['id', 'userId', 'operationType', 'executionStatus', 'verificationStatus', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'operationType', 'mode', 'targetReference', 'method', 'executionStatus', 'verificationStatus', 'trackingState', 'idempotencyKey', 'targetCount', 'hasRecoveryCopy', 'createdAt', 'verificationMessage'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.operationType is string && data.operationType.size() <= 50
+        && data.executionStatus is string && data.executionStatus.size() <= 50
+        && data.verificationStatus is string && data.verificationStatus.size() <= 50
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && (!('verificationMessage' in data) || (data.verificationMessage is string && data.verificationMessage.size() <= 1000));
+    }
+
+    function isValidRecoveryCopyRecord(data) {
+      return data.keys().hasAll(['id', 'userId', 'operationId', 'originalFileName', 'createdAt', 'status'])
+        && data.keys().hasOnly(['id', 'userId', 'operationId', 'originalFileName', 'originalWorkspacePath', 'recoveryVaultPath', 'originalSha256', 'createdAt', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.operationId is string && data.operationId.size() <= 128
+        && data.originalFileName is string && data.originalFileName.size() <= 255
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && data.status is string && data.status.size() <= 50;
+    }
+
+    function isValidReportRecord(data) {
+      return data.keys().hasAll(['id', 'userId', 'operationId', 'reportStatus', 'reportSha256', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'operationId', 'idempotencyKey', 'reportStatus', 'reportSha256', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.operationId is string && data.operationId.size() <= 128
+        && data.reportStatus is string && data.reportStatus.size() <= 50
+        && data.reportSha256 is string && data.reportSha256.size() <= 64
+        && data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidAuditLogEntry(data) {
+      return data.keys().hasAll(['id', 'userId', 'action', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'action', 'operationId', 'previousHash', 'entryHash', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.action is string && data.action.size() <= 100
+        && data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      allow get, list: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming())
+        && incoming().id == existing().id;
+      allow delete: if false;
+    }
+
+    match /operations/{operationId} {
+      allow get: if isSignedIn() && isValidId(operationId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(operationId) && isValidOperationRecord(incoming());
+      allow update: if isSignedIn() && isValidId(operationId) && existing().userId == request.auth.uid
+        && isValidOperationRecord(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /recovery_copies/{copyId} {
+      allow get: if isSignedIn() && isValidId(copyId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(copyId) && isValidRecoveryCopyRecord(incoming());
+      allow update: if isSignedIn() && isValidId(copyId) && existing().userId == request.auth.uid
+        && isValidRecoveryCopyRecord(incoming())
+        && incoming().userId == existing().userId;
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(reportId) && isValidReportRecord(incoming());
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(logId) && isValidAuditLogEntry(incoming());
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
