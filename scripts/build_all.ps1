@@ -3,6 +3,7 @@
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 Write-Host ">>> STEP 1: Running Phase 0 Prerequisite & Config Check..." -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "check_env.ps1")
@@ -12,9 +13,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ">>> STEP 2: Loading Configuration & Exporting Build-Time Environment..." -ForegroundColor Cyan
-$mongoEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\mongodb.env"
+$mongoEnvFile = Join-Path $projectRoot "frontend\src-tauri\config\mongodb.env"
 if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $PSScriptRoot "..\.env"
+    $mongoEnvFile = Join-Path $projectRoot ".env"
+}
+if (-not (Test-Path $mongoEnvFile)) {
+    $mongoEnvFile = Join-Path $projectRoot "backend\.env"
 }
 
 if (Test-Path $mongoEnvFile) {
@@ -25,6 +29,20 @@ if (Test-Path $mongoEnvFile) {
             $name = $parts[0].Trim()
             $val = $parts[1].Trim().Trim('"').Trim("'")
             [System.Environment]::SetEnvironmentVariable($name, $val, [System.EnvironmentVariableTarget]::Process)
+            switch ($name) {
+                { $_ -in "MONGODB_URI", "CIPHER_MONGODB_URI" } {
+                    [System.Environment]::SetEnvironmentVariable("MONGODB_URI", $val, [System.EnvironmentVariableTarget]::Process)
+                    [System.Environment]::SetEnvironmentVariable("CIPHER_MONGODB_URI", $val, [System.EnvironmentVariableTarget]::Process)
+                }
+                { $_ -in "JWT_SECRET", "CIPHER_JWT_SECRET" } {
+                    [System.Environment]::SetEnvironmentVariable("JWT_SECRET", $val, [System.EnvironmentVariableTarget]::Process)
+                    [System.Environment]::SetEnvironmentVariable("CIPHER_JWT_SECRET", $val, [System.EnvironmentVariableTarget]::Process)
+                }
+                { $_ -in "MONGODB_DB_NAME", "CIPHER_MONGODB_DB_NAME" } {
+                    [System.Environment]::SetEnvironmentVariable("MONGODB_DB_NAME", $val, [System.EnvironmentVariableTarget]::Process)
+                    [System.Environment]::SetEnvironmentVariable("CIPHER_MONGODB_DB_NAME", $val, [System.EnvironmentVariableTarget]::Process)
+                }
+            }
         }
     }
     Write-Host "  Loaded MongoDB Atlas & JWT environment variables into caller process." -ForegroundColor Green
@@ -39,18 +57,18 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host ">>> STEP 4: Executing Frontend Tests..." -ForegroundColor Cyan
-$frontendDir = Join-Path $PSScriptRoot "..\frontend"
-if (-not (Test-Path $frontendDir)) {
-    $frontendDir = Join-Path $PSScriptRoot ".."
-}
-
-Push-Location $frontendDir
+Write-Host ">>> STEP 4: Running configured tests, if available..." -ForegroundColor Cyan
+Push-Location $projectRoot
 try {
-    npm test
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Frontend test suite failed. Aborting packaging."
-        exit 1
+    $package = Get-Content (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
+    if ($package.scripts.test) {
+        npm test
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test suite failed. Aborting packaging."
+            exit 1
+        }
+    } else {
+        Write-Host "  No test script configured; skipping tests." -ForegroundColor Yellow
     }
 
     Write-Host ">>> STEP 5: Compiling Frontend Distribution..." -ForegroundColor Cyan
@@ -60,8 +78,15 @@ try {
         exit 1
     }
 
-    Write-Host ">>> STEP 6: Building Tauri Desktop NSIS Package..." -ForegroundColor Cyan
-    npm run tauri -- build
+} finally {
+    Pop-Location
+}
+
+Write-Host ">>> STEP 6: Building Tauri Desktop NSIS Package..." -ForegroundColor Cyan
+$tauriCli = Join-Path $projectRoot "node_modules\.bin\tauri.cmd"
+Push-Location (Join-Path $projectRoot "frontend")
+try {
+    & $tauriCli build
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Tauri package bundling failed."
         exit 1

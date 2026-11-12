@@ -75,11 +75,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setLoginError(null);
     setSignupError(null);
 
-    if (!acceptedTerms) {
+    if (mode === 'signup' && !acceptedTerms) {
       const errMsg =
         'You must check the box to confirm you have read and agree to the Privacy Policy and Terms and Conditions.';
-      if (mode === 'signup') setSignupError(errMsg);
-      else setLoginError(errMsg);
+      setSignupError(errMsg);
       return;
     }
 
@@ -129,9 +128,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
 
     const emailTrim = loginEmail.trim();
-    const pwdTrim = loginPassword.trim();
+    const password = loginPassword;
 
-    if (!emailTrim || !pwdTrim) {
+    if (!emailTrim || !password) {
       setLoginError('Email and password must be entered manually.');
       return;
     }
@@ -141,12 +140,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (pwdTrim.length < 6) {
-      setLoginError('Email or password is incorrect.');
-      return;
-    }
-
-    const res = await ApiService.login(emailTrim, pwdTrim);
+    const res = await ApiService.login(emailTrim, password);
     if (res.success && res.profile) {
       await StorageService.logAuditEvent('OPERATOR_SIGNED_IN_FASTAPI', undefined, { email: emailTrim });
       onLoginSuccess(res.profile);

@@ -2,11 +2,11 @@
  * Cipher Labs - Secure Erasure & Universal Permanent File Deletion Module
  * Universal Filesystem Location Deletion Support across Windows Desktop, Downloads, Documents,
  * Pictures, Videos, Music, C:\, D:\, E:\, external drives, and custom locations.
- * Includes Native Tauri Dialog integration with web fallback.
+ * Uses the native Tauri dialog to retain full filesystem paths.
  * Follows 6-Stage Mandatory Workflow: Select Location & Target -> Validate & Analyze -> Confirm -> Delete -> Verify -> Audit & Report.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   ShieldAlert,
   Eraser,
@@ -46,6 +46,8 @@ import {
 import { OperationRecord, RecoveryCopyRecord, ReportRecord, UserProfile } from '../types';
 import { StorageService, computeSha256 } from '../services/storage';
 import { ApiService } from '../services/api';
+import { isTauri } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
 export interface DeviceFileItem {
   id: string;
@@ -55,6 +57,7 @@ export interface DeviceFileItem {
   lastModified: string;
   dataUrl?: string;
   content?: string;
+  recoveryData?: Blob;
   path: string;
   locationCategory?: string;
   sha256?: string;
@@ -197,6 +200,9 @@ export const detectLocationCategory = (targetPath: string): string => {
   return 'Custom Path';
 };
 
+const isAbsoluteFileSystemPath = (path: string): boolean =>
+  /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(path);
+
 interface SecureErasureProps {
   isDark: boolean;
   profile: UserProfile;
@@ -223,6 +229,7 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
   const [deviceFiles, setDeviceFiles] = useState<DeviceFileItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
 
   // Manual Absolute Path Entry Input
   const [manualPathInput, setManualPathInput] = useState('');
@@ -267,9 +274,6 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
     fileCount: number;
   } | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -278,45 +282,48 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  // Open Native Tauri Dialog if present, else fallback
+  // Use the native dialog so selected targets retain their absolute filesystem paths.
   const handleOpenNativePicker = async (isFolder: boolean) => {
-    if (typeof window !== 'undefined' && (window as any).__TAURI__?.dialog) {
-      try {
-        const selected = await (window as any).__TAURI__.dialog.open({
-          multiple: true,
-          directory: isFolder,
-        });
-        if (selected) {
-          const paths = Array.isArray(selected) ? selected : [selected];
-          const newItems: DeviceFileItem[] = paths.map((p: string) => {
-            const name = p.split(/[/\\]/).pop() || p;
-            return {
-              id: `dev-tauri-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              name,
-              size: 0,
-              type: isFolder ? 'Directory Folder' : 'Filesystem File',
-              lastModified: new Date().toISOString(),
-              path: p,
-              locationCategory: detectLocationCategory(p),
-              validationStatus: 'Pending',
-              deletionStatus: 'Pending',
-              verificationStatus: 'Pending',
-            };
-          });
-          const combined = [...deviceFiles, ...newItems];
-          setDeviceFiles(combined);
-          await runPreDeletionAnalysis(combined);
-          return;
-        }
-      } catch (e) {
-        console.error('Tauri file dialog error:', e);
-      }
+    setPickerError(null);
+    if (!isTauri()) {
+      setPickerError('Local filesystem selection is unavailable in the browser. Use the Cipher Labs desktop app to choose files for secure erasure.');
+      return;
     }
 
-    if (isFolder) {
-      folderInputRef.current?.click();
-    } else {
-      fileInputRef.current?.click();
+    try {
+      const selected = await open({
+        multiple: true,
+        directory: isFolder,
+      });
+      if (!selected) return;
+
+      const paths = Array.isArray(selected) ? selected : [selected];
+      if (paths.some((path) => !isAbsoluteFileSystemPath(path))) {
+        setPickerError('The native file picker did not return an absolute path. Please select the target again.');
+        return;
+      }
+
+      const newItems: DeviceFileItem[] = paths.map((path) => {
+        const name = path.split(/[/\\]/).pop() || path;
+        return {
+          id: `dev-tauri-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name,
+          size: 0,
+          type: isFolder ? 'Directory Folder' : 'Filesystem File',
+          lastModified: new Date().toISOString(),
+          path,
+          locationCategory: detectLocationCategory(path),
+          validationStatus: 'Pending',
+          deletionStatus: 'Pending',
+          verificationStatus: 'Pending',
+        };
+      });
+      const combined = [...deviceFiles, ...newItems];
+      setDeviceFiles(combined);
+      await runPreDeletionAnalysis(combined);
+    } catch (error) {
+      console.error('Tauri file dialog error:', error);
+      setPickerError(error instanceof Error ? `Could not open the native file picker: ${error.message}` : 'Could not open the native file picker.');
     }
   };
 
@@ -425,13 +432,24 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
     }
   };
 
-  // Helper to read raw files from Drag & Drop or File Input efficiently
+  // Process dropped files only when their original absolute paths are available.
   const processRawFiles = async (rawFiles: FileList | File[]) => {
+    const files = Array.from(rawFiles);
+    if (!isTauri()) {
+      setPickerError('The browser does not provide the absolute filesystem paths required for secure erasure. Use the Cipher Labs desktop app.');
+      return;
+    }
+
+    if (files.some((file) => !isAbsoluteFileSystemPath((file as File & { path?: string }).path || ''))) {
+      setPickerError('The dropped file did not include its absolute filesystem path. Use Browse Files or Browse Folder to select it.');
+      return;
+    }
+
+    setPickerError(null);
     setIsLoadingFiles(true);
     const newItems: DeviceFileItem[] = [];
 
-    for (let i = 0; i < rawFiles.length; i++) {
-      const file = rawFiles[i];
+    for (const file of files) {
       try {
         let dataUrl = '';
         if (file.size < 256 * 1024 && file.type.startsWith('image/')) {
@@ -443,21 +461,10 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
           });
         }
 
-        let hash = '';
-        try {
-          if (file.size < 2 * 1024 * 1024) {
-            const arrayBuffer = await file.arrayBuffer();
-            hash = await computeSha256(new Uint8Array(arrayBuffer));
-          } else {
-            const slice = file.slice(0, 1024 * 1024);
-            const arrayBuffer = await slice.arrayBuffer();
-            hash = await computeSha256(new Uint8Array(arrayBuffer));
-          }
-        } catch {
-          hash = await computeSha256(`${file.name}:${file.size}:${file.lastModified}`);
-        }
+        const arrayBuffer = await file.arrayBuffer();
+        const hash = await computeSha256(new Uint8Array(arrayBuffer));
 
-        const itemPath = (file as any).webkitRelativePath || (file as any).path || file.name;
+        const itemPath = (file as File & { path: string }).path;
 
         newItems.push({
           id: `dev-file-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -466,6 +473,7 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
           type: file.type || 'Unknown Format',
           lastModified: new Date(file.lastModified).toISOString(),
           dataUrl,
+          recoveryData: file,
           path: itemPath,
           locationCategory: detectLocationCategory(itemPath),
           sha256: hash,
@@ -597,20 +605,6 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       await processRawFiles(e.dataTransfer.files);
-    }
-  };
-
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await processRawFiles(e.target.files);
-      e.target.value = '';
-    }
-  };
-
-  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await processRawFiles(e.target.files);
-      e.target.value = '';
     }
   };
 
@@ -955,24 +949,6 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  multiple
-                  ref={fileInputRef}
-                  onChange={handleFileInputChange}
-                  className="hidden"
-                />
-                <input
-                  type="file"
-                  multiple
-                  // @ts-ignore
-                  webkitdirectory=""
-                  directory=""
-                  ref={folderInputRef}
-                  onChange={handleFolderInputChange}
-                  className="hidden"
-                />
-
                 <button
                   type="button"
                   onClick={() => handleOpenNativePicker(false)}
@@ -992,6 +968,12 @@ export const SecureErasure: React.FC<SecureErasureProps> = ({
                 </button>
               </div>
             </div>
+
+            {pickerError && (
+              <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                {pickerError}
+              </div>
+            )}
 
             {/* Drag & Drop Zone */}
             <div

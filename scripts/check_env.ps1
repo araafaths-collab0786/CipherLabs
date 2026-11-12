@@ -3,6 +3,7 @@
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host " CIPHER LABS - ENVIRONMENT & PREREQUISITE CHECK (v3.1)" -ForegroundColor Cyan
@@ -56,7 +57,8 @@ try {
 # 4. Rust Toolchain (>= 1.90 requirement for modern Tauri & deep-link plugin)
 try {
     $rustcVer = (rustc --version).Trim()
-    Report-Check "Rust Compiler" $true $rustcVer
+    $rustVersion = [version]($rustcVer -replace '^rustc (\d+\.\d+\.\d+).*', '$1')
+    Report-Check "Rust Compiler" ($rustVersion -ge [version]'1.90.0') "$rustcVer (>= 1.90 required)"
     $triple = (rustc -vV | Select-String "host:").ToString().Split(':')[1].Trim()
     if ($triple -eq "x86_64-pc-windows-msvc" -or $triple -like "*x86_64*") {
         Report-Check "Rust Target Triple" $true $triple
@@ -66,46 +68,61 @@ try {
 } catch {
     Report-Check "Rust Toolchain" $false "rustc not found. Install Rust >= 1.90 with x86_64-pc-windows-msvc"
 }
+try {
+    $cargoVer = (cargo --version).Trim()
+    Report-Check "Cargo" ($LASTEXITCODE -eq 0) $cargoVer
+} catch {
+    Report-Check "Cargo" $false "cargo not found. Install the Rust MSVC toolchain"
+}
 
-# 5. Dependency installation order fix: Install frontend dependencies BEFORE verifying local Tauri CLI
-$frontendDir = Join-Path $PSScriptRoot "..\frontend"
-if (Test-Path $frontendDir) {
-    $nodeModules = Join-Path $frontendDir "node_modules"
-    if (-not (Test-Path $nodeModules)) {
-        Write-Host "Installing frontend packages prior to CLI verification..." -ForegroundColor Yellow
-        Push-Location $frontendDir
-        npm install --silent
+# 5. Install dependencies from the workspace root, where package.json lives
+$nodeModules = Join-Path $projectRoot "node_modules"
+if (-not (Test-Path $nodeModules)) {
+    Write-Host "Installing workspace packages..." -ForegroundColor Yellow
+    Push-Location $projectRoot
+    try {
+        npm install --no-audit --no-fund --package-lock=false
+        if ($LASTEXITCODE -ne 0) {
+            Report-Check "Workspace Dependencies" $false "npm install failed"
+        }
+    } finally {
         Pop-Location
     }
-    Report-Check "Frontend Dependencies" $true "frontend/node_modules populated"
-} else {
-    Report-Check "Frontend Folder" $true "Workspace root mode"
 }
+Report-Check "Workspace Dependencies" (Test-Path (Join-Path $projectRoot "node_modules")) "root node_modules populated"
 
 # 6. Tauri CLI Check
 try {
-    $tauriVer = (npx tauri --version 2>&1).Trim()
-    Report-Check "Tauri CLI" $true $tauriVer
+    $tauriCli = Join-Path $projectRoot "node_modules\.bin\tauri.cmd"
+    if (Test-Path $tauriCli) {
+        $tauriVer = (& $tauriCli --version 2>&1 | Out-String).Trim()
+        Report-Check "Tauri CLI" ($LASTEXITCODE -eq 0) $tauriVer
+    } else {
+        Report-Check "Tauri CLI" $false "Install @tauri-apps/cli from the workspace root"
+    }
 } catch {
-    Report-Check "Tauri CLI" $false "Tauri CLI not detected. Run npm install in frontend/"
+    Report-Check "Tauri CLI" $false "Tauri CLI could not run"
 }
 
 # 7. MongoDB Atlas Configuration Validation (Credentials are NEVER printed)
-$mongoEnvFile = Join-Path $PSScriptRoot "..\frontend\src-tauri\config\mongodb.env"
+$mongoEnvFile = Join-Path $projectRoot "frontend\src-tauri\config\mongodb.env"
 if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $PSScriptRoot "..\.env"
+    $mongoEnvFile = Join-Path $projectRoot ".env"
+}
+if (-not (Test-Path $mongoEnvFile)) {
+    $mongoEnvFile = Join-Path $projectRoot "backend\.env"
 }
 
 if (Test-Path $mongoEnvFile) {
     $envContent = Get-Content $mongoEnvFile -Raw
-    $uriMatches = [regex]::Match($envContent, "CIPHER_MONGODB_URI\s*=\s*['""]?((?:mongodb(?:\+srv)?):\/\/[^\s'""\r\n]+)")
+    $uriMatches = [regex]::Match($envContent, "(?m)^\s*(?:CIPHER_)?MONGODB_URI\s*=\s*['""]?((?:mongodb(?:\+srv)?):\/\/[^\s'""\r\n]+)")
     if ($uriMatches.Success) {
         Report-Check "MongoDB Atlas URI" $true "Present and format OK (mongodb+srv:// cluster protocol validated)"
     } else {
         Report-Check "MongoDB Atlas URI" $false "Missing or invalid format (must start with mongodb+srv:// or mongodb://)"
     }
 
-    $jwtMatches = [regex]::Match($envContent, "CIPHER_JWT_SECRET\s*=\s*['""]?([^\s'""\r\n]+)")
+    $jwtMatches = [regex]::Match($envContent, "(?m)^\s*(?:CIPHER_)?JWT_SECRET\s*=\s*['""]?([^\s'""\r\n]+)")
     if ($jwtMatches.Success) {
         Report-Check "JWT Secret Key" $true "Present and format OK (FastAPI auth secret configured)"
     } else {

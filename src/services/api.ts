@@ -10,6 +10,55 @@ import { UserProfile, OperationRecord, ReportRecord, RecoveryCopyRecord } from '
 const API_BASE_URL = 'http://127.0.0.1:8765/api';
 const TOKEN_KEY = 'cipherlabs_jwt_token';
 
+export interface ApiDeletionOperation {
+  id: string;
+  user_id?: string;
+  operation_type: OperationRecord['operationType'];
+  mode: OperationRecord['mode'];
+  target_reference: string;
+  method: string;
+  execution_status: OperationRecord['executionStatus'];
+  verification_status: OperationRecord['verificationStatus'];
+  tracking_state: OperationRecord['trackingState'];
+  idempotency_key: string;
+  target_count: number;
+  has_recovery_copy: boolean;
+  total_bytes_processed?: number;
+  successful_count?: number;
+  failed_count?: number;
+  created_at: string;
+  completed_at?: string;
+  verification_message: string;
+  pre_hashes: Record<string, string>;
+}
+
+export interface ApiDeletionReport {
+  id: string;
+  user_id?: string;
+  operation_id: string;
+  idempotency_key: string;
+  report_status: ReportRecord['reportStatus'];
+  report_sha256: string;
+  created_at: string;
+  report_json: {
+    title?: string;
+    operationType: string;
+    method: string;
+    executionStatus: string;
+    verificationStatus: string;
+    targets: Array<{
+      name: string;
+      size: number;
+      sha256: string;
+      deletionStatus?: string;
+      verificationStatus?: string;
+      savedToRecovery?: boolean;
+    }>;
+    simulationDisclaimer: string;
+    timestamp: string;
+  };
+}
+
 export class ApiService {
   static getToken(): string | null {
     return localStorage.getItem(TOKEN_KEY);
@@ -75,26 +124,12 @@ export class ApiService {
       if (json.error) {
         return { success: false, error: json.error.message };
       }
-    } catch (e) {
-      // Local fallback mode when offline
+    } catch (error) {
+      console.error('Sign-in request failed:', error);
+      return { success: false, error: 'The sign-in service is unavailable. Check your connection and try again.' };
     }
 
-    // Local client validation fallback
-    if (password.length < 6) {
-      return { success: false, error: 'Email or password is incorrect.' };
-    }
-
-    const existing = StorageService.getProfile();
-    const rawName = email.split('@')[0];
-    const derivedFirstName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-    const fallbackProfile: UserProfile = {
-      ...existing,
-      firstName: existing.email === email ? existing.firstName : derivedFirstName,
-      lastName: existing.email === email ? existing.lastName : 'Operator',
-      email: email,
-    };
-    StorageService.updateProfile(fallbackProfile);
-    return { success: true, profile: fallbackProfile };
+    return { success: false, error: 'Sign-in could not be completed. Please try again.' };
   }
 
   static async signup(data: {
@@ -136,23 +171,12 @@ export class ApiService {
       if (json.error) {
         return { success: false, error: json.error.message };
       }
-    } catch (e) {
-      // Local fallback mode
+    } catch (error) {
+      console.error('Sign-up request failed:', error);
+      return { success: false, error: 'The sign-up service is unavailable. Check your connection and try again.' };
     }
 
-    const newProfile: UserProfile = {
-      id: `usr-${Date.now()}`,
-      firstName: data.firstName.trim(),
-      lastName: data.lastName.trim(),
-      email: data.email.trim(),
-      phone: data.phone?.trim() || undefined,
-      preferences: {
-        theme: 'dark',
-        keepLogsDays: 90,
-      },
-    };
-    StorageService.updateProfile(newProfile);
-    return { success: true, profile: newProfile };
+    return { success: false, error: 'Sign-up could not be completed. Please try again.' };
   }
 
   static async validateErasureTargets(targetPaths: string[]): Promise<{
@@ -218,9 +242,9 @@ export class ApiService {
   ): Promise<{
     success: boolean;
     data?: {
-      operation: OperationRecord;
+      operation: ApiDeletionOperation;
       recovery_copies: RecoveryCopyRecord[];
-      report: ReportRecord;
+      report: ApiDeletionReport;
     };
     error?: string;
   }> {
@@ -254,5 +278,37 @@ export class ApiService {
     }
 
     return { success: false, error: 'Sidecar offline or operation failed' };
+  }
+
+  static async getRecoveryFile(
+    recoveryFileName: string,
+    originalSha256: string
+  ): Promise<Blob> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = this.getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}/recovery/file`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        recovery_file_name: recoveryFileName,
+        original_sha256: originalSha256,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      let detail = `Recovery vault request failed (${response.status}).`;
+      try {
+        const error = await response.json();
+        if (typeof error.detail === 'string') detail = error.detail;
+      } catch {
+        // Keep the HTTP status message when the server does not return JSON.
+      }
+      throw new Error(detail);
+    }
+
+    return response.blob();
   }
 }

@@ -27,6 +27,86 @@ const STORAGE_KEYS = {
   THEME: 'cipherlabs_theme',
 };
 
+const RECOVERY_DB_NAME = 'cipherlabs-recovery-vault';
+const RECOVERY_STORE_NAME = 'recovery-files';
+let recoveryDbPromise: Promise<IDBDatabase> | null = null;
+
+function getRecoveryDatabase(): Promise<IDBDatabase> {
+  if (!recoveryDbPromise) {
+    recoveryDbPromise = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) {
+        reject(new Error('Persistent recovery storage is unavailable in this environment.'));
+        return;
+      }
+
+      const request = indexedDB.open(RECOVERY_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(RECOVERY_STORE_NAME);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('Could not open persistent recovery storage.'));
+      request.onblocked = () => reject(new Error('Persistent recovery storage is blocked by another open application window.'));
+    });
+  }
+  return recoveryDbPromise;
+}
+
+async function saveRecoveryFile(id: string, file: Blob): Promise<void> {
+  const db = await getRecoveryDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, 'readwrite');
+    transaction.objectStore(RECOVERY_STORE_NAME).put(file, id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('Could not save the recovery file.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Saving the recovery file was aborted.'));
+  });
+}
+
+async function loadRecoveryFile(id: string): Promise<Blob | null> {
+  const db = await getRecoveryDatabase();
+  return new Promise<Blob | null>((resolve, reject) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, 'readonly');
+    const request = transaction.objectStore(RECOVERY_STORE_NAME).get(id);
+    let file: Blob | null = null;
+    request.onsuccess = () => {
+      file = request.result instanceof Blob ? request.result : null;
+    };
+    transaction.oncomplete = () => resolve(file);
+    transaction.onerror = () => reject(transaction.error || new Error('Could not read the recovery file.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Reading the recovery file was aborted.'));
+  });
+}
+
+async function deleteRecoveryFile(id: string): Promise<void> {
+  const db = await getRecoveryDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, 'readwrite');
+    transaction.objectStore(RECOVERY_STORE_NAME).delete(id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('Could not clean up temporary recovery data.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Recovery data cleanup was aborted.'));
+  });
+}
+
+function blobFromDataUrl(dataUrl: string): Blob {
+  const separator = dataUrl.indexOf(',');
+  if (separator < 0) {
+    throw new Error('The saved recovery data is malformed.');
+  }
+
+  const metadata = dataUrl.slice(0, separator);
+  const payload = dataUrl.slice(separator + 1);
+  const base64Encoded = metadata.endsWith(';base64');
+  const binary = base64Encoded ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  const mimeType = /^data:([^;]*)/.exec(metadata)?.[1] || 'application/octet-stream';
+  return new Blob([bytes], { type: mimeType });
+}
+
 // Cryptographic SHA-256 using standard Web Crypto API
 export async function computeSha256(data: string | Uint8Array): Promise<string> {
   const encoder = new TextEncoder();
@@ -80,6 +160,104 @@ const DEFAULT_PROFILE: UserProfile = {
   },
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readStoredArray<T>(key: string): T[] {
+  const raw = localStorage.getItem(key);
+  if (!raw) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.every(isRecord)) {
+      throw new TypeError(`Stored value for "${key}" is not an array of records.`);
+    }
+    return parsed as T[];
+  } catch (error) {
+    console.error(`Could not load stored app data for "${key}". The saved value was left unchanged.`, error);
+    return [];
+  }
+}
+
+function readString(record: Record<string, unknown>, keys: string[], fallback: string): string {
+  for (const key of keys) {
+    if (typeof record[key] === 'string') return record[key];
+  }
+  return fallback;
+}
+
+function normalizeReportRecord(record: Record<string, unknown>, index: number): ReportRecord {
+  const rawJson = isRecord(record.reportJson)
+    ? record.reportJson
+    : isRecord(record.report_json)
+      ? record.report_json
+      : {};
+  const rawDeviceInfo = isRecord(rawJson.deviceInfo)
+    ? rawJson.deviceInfo
+    : isRecord(rawJson.device_info)
+      ? rawJson.device_info
+      : {};
+  const rawTargets = Array.isArray(rawJson.targets) ? rawJson.targets : [];
+  const targets = rawTargets.filter(isRecord).map((target, targetIndex) => {
+    const rawSize = typeof target.size === 'number' ? target.size : target.size_bytes;
+    return {
+      name: readString(target, ['name'], `Target ${targetIndex + 1}`),
+      size: typeof rawSize === 'number' && Number.isFinite(rawSize) ? rawSize : 0,
+      sha256: readString(target, ['sha256', 'sha_256'], ''),
+      status: readString(
+        target,
+        ['status', 'verificationStatus', 'verification_status', 'deletionStatus', 'deletion_status'],
+        'UNAVAILABLE'
+      ),
+      ...(typeof target.savedToRecovery === 'boolean' ? { savedToRecovery: target.savedToRecovery } : {}),
+    };
+  });
+  const timestamp = readString(
+    rawJson,
+    ['timestamp', 'generatedAt', 'generated_at'],
+    readString(record, ['createdAt', 'created_at'], '')
+  );
+  const reportJson = {
+    ...rawJson,
+    operationType: readString(rawJson, ['operationType', 'operation_type'], 'Unknown operation'),
+    method: readString(rawJson, ['method'], 'Unknown method'),
+    executionStatus: readString(rawJson, ['executionStatus', 'execution_status'], 'UNAVAILABLE'),
+    verificationStatus: readString(rawJson, ['verificationStatus', 'verification_status'], 'UNAVAILABLE'),
+    targets,
+    simulationDisclaimer: readString(
+      rawJson,
+      ['simulationDisclaimer', 'simulation_disclaimer'],
+      'Saved report details are incomplete; only available metadata is shown.'
+    ),
+    timestamp,
+    deviceInfo: {
+      ...rawDeviceInfo,
+      appDeviceId: readString(rawDeviceInfo, ['appDeviceId', 'app_device_id'], 'Unavailable'),
+      os: readString(rawDeviceInfo, ['os', 'osName', 'os_name'], 'Unavailable'),
+      appVersion: readString(rawDeviceInfo, ['appVersion', 'app_version'], 'Unavailable'),
+    },
+  } as ReportRecord['reportJson'];
+  const operationId = readString(
+    record,
+    ['operationId', 'operation_id'],
+    readString(rawJson, ['operationId', 'operation_id'], '')
+  );
+  const status = readString(record, ['reportStatus', 'report_status'], 'INCOMPLETE').toUpperCase();
+
+  return {
+    ...record,
+    id: readString(record, ['id', 'reportId', 'report_id'], operationId || `legacy-report-${index + 1}`),
+    userId: readString(record, ['userId', 'user_id'], ''),
+    operationId,
+    idempotencyKey: readString(record, ['idempotencyKey', 'idempotency_key'], ''),
+    reportStatus: status === 'COMPLETE' ? 'COMPLETE' : 'INCOMPLETE',
+    reportSha256: readString(record, ['reportSha256', 'report_sha256'], ''),
+    createdAt: readString(record, ['createdAt', 'created_at'], timestamp),
+    reportJson,
+  };
+}
+
 export class StorageService {
   // Profiles
   static getProfile(): UserProfile {
@@ -88,7 +266,44 @@ export class StorageService {
       localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(DEFAULT_PROFILE));
       return DEFAULT_PROFILE;
     }
-    return JSON.parse(raw);
+
+    let stored: unknown;
+    try {
+      stored = JSON.parse(raw);
+    } catch (error) {
+      console.error('Could not load the saved user profile. The saved value was left unchanged.', error);
+      return DEFAULT_PROFILE;
+    }
+
+    if (!isRecord(stored)) {
+      console.error('The saved user profile has an invalid format. The saved value was left unchanged.');
+      return DEFAULT_PROFILE;
+    }
+
+    const preferences = isRecord(stored.preferences) ? stored.preferences : {};
+    const theme = preferences.theme === 'light' || preferences.theme === 'dark'
+      ? preferences.theme
+      : DEFAULT_PROFILE.preferences.theme;
+    const keepLogsDays = preferences.keepLogsDays === 30
+      || preferences.keepLogsDays === 90
+      || preferences.keepLogsDays === 365
+      ? preferences.keepLogsDays
+      : DEFAULT_PROFILE.preferences.keepLogsDays;
+
+    return {
+      id: typeof stored.id === 'string' ? stored.id : DEFAULT_PROFILE.id,
+      firstName: typeof stored.firstName === 'string' ? stored.firstName : DEFAULT_PROFILE.firstName,
+      lastName: typeof stored.lastName === 'string' ? stored.lastName : DEFAULT_PROFILE.lastName,
+      email: typeof stored.email === 'string' ? stored.email : DEFAULT_PROFILE.email,
+      phone: typeof stored.phone === 'string' ? stored.phone : DEFAULT_PROFILE.phone,
+      preferences: {
+        theme,
+        keepLogsDays,
+        exportRequestedAt: typeof preferences.exportRequestedAt === 'string'
+          ? preferences.exportRequestedAt
+          : undefined,
+      },
+    };
   }
 
   static updateProfile(profile: Partial<UserProfile>): UserProfile {
@@ -105,7 +320,7 @@ export class StorageService {
       localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(INITIAL_TEST_FILES));
       return INITIAL_TEST_FILES;
     }
-    return JSON.parse(raw);
+    return readStoredArray<TestFile>(STORAGE_KEYS.FILES);
   }
 
   static saveTestFiles(files: TestFile[]): void {
@@ -139,8 +354,7 @@ export class StorageService {
 
   // Recovery Copies
   static getRecoveryCopies(): RecoveryCopyRecord[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.RECOVERY_COPIES);
-    return raw ? JSON.parse(raw) : [];
+    return readStoredArray<RecoveryCopyRecord>(STORAGE_KEYS.RECOVERY_COPIES);
   }
 
   static saveRecoveryCopies(copies: RecoveryCopyRecord[]): void {
@@ -171,8 +385,7 @@ export class StorageService {
 
   // Operations
   static getOperations(): OperationRecord[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.OPERATIONS);
-    return raw ? JSON.parse(raw) : [];
+    return readStoredArray<OperationRecord>(STORAGE_KEYS.OPERATIONS);
   }
 
   static saveOperations(ops: OperationRecord[]): void {
@@ -185,8 +398,7 @@ export class StorageService {
 
   // Reports
   static getReports(): ReportRecord[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.REPORTS);
-    return raw ? JSON.parse(raw) : [];
+    return readStoredArray<Record<string, unknown>>(STORAGE_KEYS.REPORTS).map(normalizeReportRecord);
   }
 
   static saveReports(reports: ReportRecord[]): void {
@@ -204,7 +416,7 @@ export class StorageService {
       localStorage.setItem(STORAGE_KEYS.CANDIDATES, JSON.stringify(INITIAL_CANDIDATES));
       return INITIAL_CANDIDATES;
     }
-    return JSON.parse(raw);
+    return readStoredArray<RecoveryCandidate>(STORAGE_KEYS.CANDIDATES);
   }
 
   static saveCandidates(cands: RecoveryCandidate[]): void {
@@ -218,7 +430,30 @@ export class StorageService {
       localStorage.setItem(STORAGE_KEYS.DEVICE, JSON.stringify(DEFAULT_DEVICE));
       return DEFAULT_DEVICE;
     }
-    return JSON.parse(raw);
+
+    let stored: unknown;
+    try {
+      stored = JSON.parse(raw);
+    } catch (error) {
+      console.error('Could not load the saved device record. The saved value was left unchanged.', error);
+      return DEFAULT_DEVICE;
+    }
+
+    if (!isRecord(stored)) {
+      console.error('The saved device record has an invalid format. The saved value was left unchanged.');
+      return DEFAULT_DEVICE;
+    }
+
+    return {
+      id: typeof stored.id === 'string' ? stored.id : DEFAULT_DEVICE.id,
+      userId: typeof stored.userId === 'string' ? stored.userId : DEFAULT_DEVICE.userId,
+      appDeviceId: typeof stored.appDeviceId === 'string' ? stored.appDeviceId : DEFAULT_DEVICE.appDeviceId,
+      label: typeof stored.label === 'string' ? stored.label : DEFAULT_DEVICE.label,
+      osName: typeof stored.osName === 'string' ? stored.osName : DEFAULT_DEVICE.osName,
+      osVersion: typeof stored.osVersion === 'string' ? stored.osVersion : DEFAULT_DEVICE.osVersion,
+      appVersion: typeof stored.appVersion === 'string' ? stored.appVersion : DEFAULT_DEVICE.appVersion,
+      lastSeenAt: typeof stored.lastSeenAt === 'string' ? stored.lastSeenAt : DEFAULT_DEVICE.lastSeenAt,
+    };
   }
 
   static updateDeviceLabel(label: string): DeviceRecord {
@@ -257,7 +492,8 @@ export class StorageService {
         localStorage.setItem(STORAGE_KEYS.AUDIT, JSON.stringify(parsed));
       }
       return parsed;
-    } catch {
+    } catch (error) {
+      console.error('Could not load the saved audit log. The saved value was left unchanged.', error);
       return [];
     }
   }
@@ -493,11 +729,13 @@ export class StorageService {
   // Execute Deletion for Device Files with User Verification & Optional Recovery Save
   static async executeDeviceFileDeletion(
     files: Array<{
+      id?: string;
       name: string;
       size: number;
       type: string;
       dataUrl?: string;
       content?: string;
+      recoveryData?: Blob;
       path?: string;
       sha256?: string;
     }>,
@@ -513,35 +751,131 @@ export class StorageService {
   }> {
     const targetPaths = files.map((f) => f.path || f.name);
     const sig = userConfirmationSignature || 'PERMANENTLY DELETE';
+    const pendingRecoveryFiles = saveInRecovery
+      ? files.flatMap((file, index) => file.recoveryData
+        ? [{ key: `pending:${file.id || `${file.name}:${index}`}`, file: file.recoveryData }]
+        : [])
+      : [];
 
+    for (const pendingFile of pendingRecoveryFiles) {
+      await saveRecoveryFile(pendingFile.key, pendingFile.file);
+    }
+
+    let apiRes: Awaited<ReturnType<typeof import('./api').ApiService.executePermanentDeletion>> | undefined;
     try {
       const { ApiService } = await import('./api');
-      const apiRes = await ApiService.executePermanentDeletion(targetPaths, sig, saveInRecovery, mode, sanitizationAlgorithm);
-      if (apiRes.success && apiRes.data) {
-        const { operation, recovery_copies, report } = apiRes.data;
-
-        // Sync with local storage
-        const ops = this.getOperations();
-        ops.unshift(operation);
-        this.saveOperations(ops);
-
-        if (recovery_copies && recovery_copies.length > 0) {
-          const allCopies = this.getRecoveryCopies();
-          this.saveRecoveryCopies([...recovery_copies, ...allCopies]);
-        }
-
-        const reports = this.getReports();
-        reports.unshift(report);
-        this.saveReports(reports);
-
-        return {
-          operation,
-          recoveryCopies: recovery_copies || [],
-          report,
-        };
-      }
+      apiRes = await ApiService.executePermanentDeletion(targetPaths, sig, saveInRecovery, mode, sanitizationAlgorithm);
     } catch (e) {
-      // Offline fallback
+      console.warn('Device deletion API unavailable; using local recovery metadata:', e);
+    }
+
+    if (apiRes?.success && apiRes.data) {
+      const { operation: apiOperation, recovery_copies, report: apiReport } = apiRes.data;
+      const fallbackUserId = this.getProfile().id;
+      const operation: OperationRecord = {
+        id: apiOperation.id,
+        userId: apiOperation.user_id || fallbackUserId,
+        operationType: apiOperation.operation_type,
+        mode: apiOperation.mode,
+        targetReference: apiOperation.target_reference,
+        method: apiOperation.method,
+        executionStatus: apiOperation.execution_status,
+        verificationStatus: apiOperation.verification_status,
+        trackingState: apiOperation.tracking_state,
+        idempotencyKey: apiOperation.idempotency_key,
+        targetCount: apiOperation.target_count,
+        hasRecoveryCopy: apiOperation.has_recovery_copy,
+        totalBytesProcessed: apiOperation.total_bytes_processed,
+        successfulCount: apiOperation.successful_count,
+        failedCount: apiOperation.failed_count,
+        createdAt: apiOperation.created_at,
+        completedAt: apiOperation.completed_at,
+        verificationMessage: apiOperation.verification_message,
+        preHashes: apiOperation.pre_hashes,
+        postHashes: {},
+      };
+      const device = this.getDevice();
+      const report: ReportRecord = {
+        id: apiReport.id,
+        userId: apiReport.user_id || operation.userId,
+        operationId: apiReport.operation_id,
+        idempotencyKey: apiReport.idempotency_key,
+        reportStatus: apiReport.report_status,
+        reportSha256: apiReport.report_sha256,
+        createdAt: apiReport.created_at,
+        reportJson: {
+          title: apiReport.report_json.title,
+          operationType: apiReport.report_json.operationType,
+          method: apiReport.report_json.method,
+          executionStatus: apiReport.report_json.executionStatus,
+          verificationStatus: apiReport.report_json.verificationStatus,
+          targets: apiReport.report_json.targets.map((target) => ({
+            name: target.name,
+            size: target.size,
+            sha256: target.sha256,
+            status: target.verificationStatus || target.deletionStatus || 'UNVERIFIED',
+            savedToRecovery: target.savedToRecovery ?? saveInRecovery,
+          })),
+          simulationDisclaimer: apiReport.report_json.simulationDisclaimer,
+          timestamp: apiReport.report_json.timestamp,
+          deviceInfo: {
+            appDeviceId: device.appDeviceId,
+            os: `${device.osName} ${device.osVersion}`,
+            appVersion: device.appVersion,
+          },
+        },
+      };
+      const normalizedCopies = recovery_copies.map((record) => {
+        const apiRecord = record as RecoveryCopyRecord & {
+          operation_id?: string;
+          original_file_name?: string;
+          original_workspace_path?: string;
+          recovery_vault_path?: string;
+          original_sha256?: string;
+          created_at?: string;
+        };
+        return {
+          ...apiRecord,
+          operationId: apiRecord.operationId || apiRecord.operation_id || '',
+          originalFileName: apiRecord.originalFileName || apiRecord.original_file_name || '',
+          originalWorkspacePath: apiRecord.originalWorkspacePath || apiRecord.original_workspace_path || '',
+          recoveryVaultPath: apiRecord.recoveryVaultPath || apiRecord.recovery_vault_path || '',
+          originalSha256: apiRecord.originalSha256 || apiRecord.original_sha256 || '',
+          createdAt: apiRecord.createdAt || apiRecord.created_at || new Date().toISOString(),
+        };
+      });
+
+      for (const copy of normalizedCopies) {
+        const sourceFile = files.find((file) => file.path === copy.originalWorkspacePath)
+          || files.find((file) => file.name === copy.originalFileName);
+        if (sourceFile?.recoveryData) {
+          await saveRecoveryFile(copy.id, sourceFile.recoveryData);
+        }
+      }
+
+      // Sync with local storage
+      const ops = this.getOperations();
+      ops.unshift(operation);
+      this.saveOperations(ops);
+
+      if (normalizedCopies.length > 0) {
+        const allCopies = this.getRecoveryCopies();
+        this.saveRecoveryCopies([...normalizedCopies, ...allCopies]);
+      }
+
+      const reports = this.getReports();
+      reports.unshift(report);
+      this.saveReports(reports);
+
+      for (const pendingFile of pendingRecoveryFiles) {
+        await deleteRecoveryFile(pendingFile.key);
+      }
+
+      return {
+        operation,
+        recoveryCopies: normalizedCopies,
+        report,
+      };
     }
 
     const opId = `op-${Date.now()}`;
@@ -567,7 +901,7 @@ export class StorageService {
     const allCopies = this.getRecoveryCopies();
 
     if (saveInRecovery) {
-      for (const f of files) {
+      for (const [index, f] of files.entries()) {
         const copyRecord: RecoveryCopyRecord = {
           id: `rc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           operationId: opId,
@@ -583,6 +917,12 @@ export class StorageService {
           mimeType: f.type || 'application/octet-stream',
           source: 'device',
         };
+        const pendingKey = `pending:${f.id || `${f.name}:${index}`}`;
+        const pendingFile = pendingRecoveryFiles.find((item) => item.key === pendingKey);
+        if (pendingFile) {
+          await saveRecoveryFile(copyRecord.id, pendingFile.file);
+          await deleteRecoveryFile(pendingKey);
+        }
         newRecoveryCopies.push(copyRecord);
         allCopies.unshift(copyRecord);
       }
@@ -688,11 +1028,11 @@ export class StorageService {
   // Restore File from Controlled Recovery Copy
   static async restoreFileFromRecoveryCopy(copyId: string): Promise<{
     success: boolean;
-    restoredPath: string;
     originalSha256: string;
     restoredSha256: string;
     isIntegrityVerified: boolean;
     copyRecord: RecoveryCopyRecord;
+    fileBlob: Blob;
   }> {
     const allCopies = this.getRecoveryCopies();
     const copyIndex = allCopies.findIndex((c) => c.id === copyId);
@@ -701,17 +1041,68 @@ export class StorageService {
     }
 
     const copy = allCopies[copyIndex];
-    const restoredOutputPath = `/app-data/restored-output/${copy.originalFileName}`;
+    let fileBlob: Blob | null = null;
+    try {
+      fileBlob = await loadRecoveryFile(copyId);
+    } catch (error) {
+      console.warn('Could not access local recovery storage; checking the recovery vault:', error);
+    }
+    if (!fileBlob && copy.dataUrl && !copy.dataUrl.includes('...[truncated]')) {
+      fileBlob = blobFromDataUrl(copy.dataUrl);
+    }
+    if (!fileBlob && copy.recoveryVaultPath) {
+      const recoveryFileName = copy.recoveryVaultPath.split(/[\\/]/).pop();
+      if (recoveryFileName) {
+        const { ApiService } = await import('./api');
+        fileBlob = await ApiService.getRecoveryFile(recoveryFileName, copy.originalSha256);
+      }
+    }
+    if (!fileBlob) {
+      throw new Error('No complete file data was found in the local recovery store or recovery vault.');
+    }
 
-    // Simulate file restoration and hash recalculation
-    const restoredSha256 = copy.originalSha256; // Clean restoration yields exact bit-level match
+    const restoredSha256 = await computeSha256(new Uint8Array(await fileBlob.arrayBuffer()));
     const isIntegrityVerified = restoredSha256 === copy.originalSha256;
+    if (!isIntegrityVerified) {
+      throw new Error('The recovered file failed SHA-256 verification. No file was written to your device.');
+    }
 
-    copy.status = isIntegrityVerified ? 'VERIFIED' : 'INTEGRITY_MISMATCH';
-    copy.restoredOutputPath = restoredOutputPath;
+    return {
+      success: true,
+      originalSha256: copy.originalSha256,
+      restoredSha256,
+      isIntegrityVerified,
+      copyRecord: copy,
+      fileBlob,
+    };
+  }
+
+  static async saveRecoveryFileForCopy(copyId: string, file: Blob): Promise<void> {
+    const copy = this.getRecoveryCopies().find((item) => item.id === copyId);
+    if (!copy) {
+      throw new Error(`Recovery copy ${copyId} not found`);
+    }
+
+    const fileHash = await computeSha256(new Uint8Array(await file.arrayBuffer()));
+    if (fileHash !== copy.originalSha256) {
+      throw new Error('The selected file does not match the recorded SHA-256 hash. No recovery data was saved.');
+    }
+
+    await saveRecoveryFile(copyId, file);
+  }
+
+  static async completeFileRestoration(copyId: string, restoredPath: string, restoredSha256: string): Promise<void> {
+    const allCopies = this.getRecoveryCopies();
+    const copyIndex = allCopies.findIndex((c) => c.id === copyId);
+    if (copyIndex === -1) {
+      throw new Error(`Recovery copy ${copyId} not found`);
+    }
+
+    const copy = allCopies[copyIndex];
+    copy.status = 'VERIFIED';
+    copy.restoredOutputPath = restoredPath;
     copy.restoredSha256 = restoredSha256;
     copy.restoredAt = new Date().toISOString();
-
     allCopies[copyIndex] = copy;
     this.saveRecoveryCopies(allCopies);
 
@@ -719,26 +1110,17 @@ export class StorageService {
     const ops = this.getOperations();
     const op = ops.find((o) => o.id === copy.operationId);
     if (op) {
-      op.trackingState = isIntegrityVerified ? 'Verification Passed' : 'Verification Failed';
+      op.trackingState = 'Verification Passed';
       this.saveOperations(ops);
     }
 
     await this.logAuditEvent('FILE_RESTORED_FROM_BACKUP', copy.operationId, {
       copyId,
       originalFile: copy.originalFileName,
-      restoredOutputPath,
-      sha256Match: isIntegrityVerified,
+      restoredOutputPath: restoredPath,
+      sha256Match: restoredSha256 === copy.originalSha256,
       disclaimer: 'Backup-based restoration demonstrated. This does not prove recovery of data after genuine physical erasure.',
     });
-
-    return {
-      success: true,
-      restoredPath: restoredOutputPath,
-      originalSha256: copy.originalSha256,
-      restoredSha256,
-      isIntegrityVerified,
-      copyRecord: copy,
-    };
   }
 
   // Recover Candidate File (Phase 2 Forensic Carving)
@@ -777,8 +1159,8 @@ export class StorageService {
     // Purge old synthetic demo operations
     const ops = this.getOperations().filter(
       (o) =>
-        !o.id.includes('synth') &&
-        !o.targetReference.includes('confidential_financials') &&
+        !o.id?.includes('synth') &&
+        !o.targetReference?.includes('confidential_financials') &&
         o.id !== 'op-01'
     );
     this.saveOperations(ops);
@@ -786,7 +1168,7 @@ export class StorageService {
     // Purge old synthetic test files
     const files = this.getTestFiles().filter(
       (f) =>
-        !f.id.startsWith('tf-0') &&
+        !f.id?.startsWith('tf-0') &&
         f.id !== 'tf-01' &&
         f.id !== 'tf-02' &&
         f.id !== 'tf-03' &&
@@ -796,7 +1178,7 @@ export class StorageService {
     this.saveTestFiles(files);
 
     // Purge synthetic disk carving candidates
-    const candidates = this.getCandidates().filter((c) => !c.id.startsWith('cand-0'));
+    const candidates = this.getCandidates().filter((c) => !c.id?.startsWith('cand-0'));
     this.saveCandidates(candidates);
 
     // Purge synthetic demo reports

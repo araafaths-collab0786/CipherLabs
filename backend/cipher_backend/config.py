@@ -6,7 +6,11 @@ Never logs or exposes secret values.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+# Load backend/.env before reading environment variables
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=ENV_FILE, override=False)
 # Paths
 APP_DATA_DIR = os.getenv("CIPHER_APP_DATA")
 if not APP_DATA_DIR:

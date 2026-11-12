@@ -1,8 +1,16 @@
 node_modules/
+backend/.venv/
+backend/build/
+backend/dist/
+backend/*.spec
+backend/**/__pycache__/
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/*.exe
 build/
 dist/
 coverage/
 .DS_Store
 *.log
-.env*
+.env
+.env.*
 !.env.example

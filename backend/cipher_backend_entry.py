@@ -11,8 +11,10 @@ import uvicorn
 if __name__ == "__main__":
     # Ensure current directory is in sys.path
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cipher_backend.main import app
+
     uvicorn.run(
-        "cipher_backend.main:app",
+        app,
         host="127.0.0.1",
         port=8765,
         log_level="info",

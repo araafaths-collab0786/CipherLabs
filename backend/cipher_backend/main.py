@@ -33,12 +33,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:1420",
-        "http://localhost:3000",
-        "tauri://localhost",
-        "http://127.0.0.1:1420",
-        "http://127.0.0.1:3000"
-    ],
+    "http://localhost:1420",
+    "http://localhost:3000",
+    "http://tauri.localhost",
+    "tauri://localhost",
+    "http://127.0.0.1:1420",
+    "http://127.0.0.1:3000"
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

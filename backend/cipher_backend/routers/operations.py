@@ -4,14 +4,17 @@ Handles simulation execution, target inspections, and verification re-checks.
 """
 
 import os
+import re
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import FileResponse
 from ..schemas import (
     ResponseEnvelope,
     ErrorDetail,
     SimulationRunRequest,
     TargetValidateRequest,
     PermanentDeleteRunRequest,
+    RestoreRecoveryFileRequest,
 )
 from ..auth import get_current_user
 from ..config import TEST_WORKSPACE_DIR, RESTORED_OUTPUT_DIR, RECOVERY_VAULT_DIR
@@ -87,6 +90,33 @@ async def execute_permanent_erasure(
         return ResponseEnvelope(
             error=ErrorDetail(code="DELETION_FAILED", message=f"Failed executing operation: {str(e)}")
         )
+
+@router.post("/recovery/file")
+async def restore_recovery_file(req: RestoreRecoveryFileRequest):
+    file_name = req.recovery_file_name
+    if (
+        file_name in {".", ".."}
+        or os.path.basename(file_name) != file_name
+        or "/" in file_name
+        or "\\" in file_name
+        or not re.fullmatch(r"[a-fA-F0-9]{64}", req.original_sha256)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid recovery file request.")
+
+    vault_root = os.path.realpath(RECOVERY_VAULT_DIR)
+    recovery_path = os.path.realpath(os.path.join(vault_root, file_name))
+    try:
+        if os.path.commonpath([vault_root, recovery_path]) != vault_root:
+            raise HTTPException(status_code=400, detail="Invalid recovery file location.")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="Invalid recovery file location.") from error
+
+    if not os.path.isfile(recovery_path):
+        raise HTTPException(status_code=404, detail="The recovery vault file no longer exists.")
+    if compute_file_sha256(recovery_path).lower() != req.original_sha256.lower():
+        raise HTTPException(status_code=409, detail="The recovery vault file failed SHA-256 verification.")
+
+    return FileResponse(recovery_path, media_type="application/octet-stream")
 
 @router.get("/erasure/simulate/targets", response_model=ResponseEnvelope)
 async def get_simulation_targets(current_user: dict = Depends(get_current_user)):

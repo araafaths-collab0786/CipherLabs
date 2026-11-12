@@ -3,9 +3,17 @@
  * SECURE. RECOVER. VERIFY.
  */
 
-export type OperationType = 'ERASURE_SIMULATION' | 'RECOVERY_TEST';
+export type OperationType =
+  | 'ERASURE_SIMULATION'
+  | 'RECOVERY_TEST'
+  | 'PERMANENT_FILE_DELETION'
+  | 'SECURE_SANITIZATION';
 
-export type OperationMode = 'SIMULATION_ONLY' | 'TEST_IMAGE';
+export type OperationMode =
+  | 'SIMULATION_ONLY'
+  | 'TEST_IMAGE'
+  | 'PERMANENT_DELETION'
+  | 'SECURE_SANITIZATION';
 
 export type ExecutionStatus =
   | 'SIMULATION_COMPLETED'
@@ -14,7 +22,10 @@ export type ExecutionStatus =
   | 'PARTIALLY_COMPLETED'
   | 'CANCELLED'
   | 'INTERRUPTED'
-  | 'RUNNING';
+  | 'RUNNING'
+  | 'COMPLETED'
+  | 'PARTIAL'
+  | 'FAILED';
 
 export type VerificationStatus =
   | 'SIMULATION_CHECK_PASSED'
@@ -22,7 +33,11 @@ export type VerificationStatus =
   | 'VERIFIED'
   | 'VERIFICATION_FAILED'
   | 'UNVERIFIED'
-  | 'NOT_APPLICABLE';
+  | 'NOT_APPLICABLE'
+  | 'PERMANENT_DELETION_VERIFIED'
+  | 'SECURE_SANITIZATION_VERIFIED'
+  | 'PARTIAL_FAILURE'
+  | 'FAILED';
 
 export type OperationTrackingState =
   | 'Ready'
@@ -34,7 +49,9 @@ export type OperationTrackingState =
   | 'Recovery Completed'
   | 'Verification Passed'
   | 'Verification Failed'
-  | 'Operation Interrupted';
+  | 'Operation Interrupted'
+  | 'Recently Deleted Vault Backup Created'
+  | 'Permanently Purged (Zero Retention)';
 
 export interface TestFile {
   id: string;

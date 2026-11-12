@@ -66,6 +66,10 @@ class PermanentDeleteRunRequest(BaseModel):
     mode: str = "PERMANENT_DELETION"
     sanitization_algorithm: Optional[str] = "NIST_800_88_REV1"
 
+class RestoreRecoveryFileRequest(BaseModel):
+    recovery_file_name: str = Field(..., min_length=1, max_length=255)
+    original_sha256: str = Field(..., min_length=64, max_length=64)
+
 class OperationItem(BaseModel):
     id: str
     user_id: str

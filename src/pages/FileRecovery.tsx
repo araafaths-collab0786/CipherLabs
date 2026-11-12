@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Archive,
   RefreshCw,
   CheckCircle2,
   FolderDown,
 } from 'lucide-react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { RecoveryCopyRecord } from '../types';
 import { StorageService } from '../services/storage';
 import { getFileTypeInfo } from './SecureErasure';
@@ -21,63 +22,82 @@ export const FileRecovery: React.FC<FileRecoveryProps> = ({
   onRefreshCopies,
 }) => {
   const [restoringCopyId, setRestoringCopyId] = useState<string | null>(null);
+  const [restorationError, setRestorationError] = useState<string | null>(null);
+  const [copyNeedingSource, setCopyNeedingSource] = useState<string | null>(null);
+  const recoveryFileInputRef = useRef<HTMLInputElement>(null);
   const [restorationAlert, setRestorationAlert] = useState<{
     fileName: string;
-    restoredPath: string;
-    originalSha256: string;
-    restoredSha256: string;
-    isVerified: boolean;
-    downloadTriggered: boolean;
+    destination: string;
   } | null>(null);
 
-  // Trigger file download to user's computer
-  const triggerBrowserDownload = (copy: RecoveryCopyRecord) => {
-    let downloadUrl = copy.dataUrl;
-    let shouldRevoke = false;
-
-    if (!downloadUrl) {
-      const fallbackContent =
-        copy.fileContent ||
-        `%PDF-1.7\n% Cipher Labs Restored Document: ${copy.originalFileName}\n% SHA-256: ${copy.originalSha256}\n% Restored: ${new Date().toISOString()}\n[Restored Content Data Verified]`;
-      const blob = new Blob([fallbackContent], {
-        type: copy.mimeType || 'application/octet-stream',
+  const saveRestoredFile = async (
+    copy: RecoveryCopyRecord,
+    file: Blob
+  ): Promise<{ auditPath: string; displayDestination: string }> => {
+    if (isTauri()) {
+      const fileBytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const destinations = await invoke<string[]>('restore_file_to_device', {
+        fileName: copy.originalFileName,
+        fileBytes,
       });
-      downloadUrl = URL.createObjectURL(blob);
-      shouldRevoke = true;
+      return {
+        auditPath: destinations.join(' and '),
+        displayDestination: `/app-data/restored-output/${copy.originalFileName} (and internal Downloads + User Downloads)`,
+      };
     }
 
+    const downloadUrl = URL.createObjectURL(file);
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = copy.originalFileName;
     document.body.appendChild(link);
     link.click();
     link.remove();
-
-    if (shouldRevoke) {
-      setTimeout(() => URL.revokeObjectURL(downloadUrl!), 1000);
-    }
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    return {
+      auditPath: 'Browser Downloads (download initiated)',
+      displayDestination: 'Browser Downloads (download initiated)',
+    };
   };
 
   const handleRestoreCopy = async (copy: RecoveryCopyRecord) => {
     setRestoringCopyId(copy.id);
+    setRestorationError(null);
+    setRestorationAlert(null);
     try {
-      await new Promise((r) => setTimeout(r, 400));
       const result = await StorageService.restoreFileFromRecoveryCopy(copy.id);
+      if (!result.isIntegrityVerified) {
+        throw new Error('The recovered file did not pass SHA-256 verification.');
+      }
 
-      // Download file to user's device
-      triggerBrowserDownload(result.copyRecord);
+      const savedFile = await saveRestoredFile(result.copyRecord, result.fileBlob);
+      await StorageService.completeFileRestoration(copy.id, savedFile.auditPath, result.restoredSha256);
 
       onRefreshCopies();
       setRestorationAlert({
         fileName: result.copyRecord.originalFileName,
-        restoredPath: result.restoredPath,
-        originalSha256: result.originalSha256,
-        restoredSha256: result.restoredSha256,
-        isVerified: result.isIntegrityVerified,
-        downloadTriggered: true,
+        destination: savedFile.displayDestination,
       });
+      setCopyNeedingSource(null);
+    } catch (error) {
+      setRestorationError(error instanceof Error ? error.message : 'The file could not be restored.');
+      setCopyNeedingSource(copy.id);
     } finally {
       setRestoringCopyId(null);
+    }
+  };
+
+  const handleChooseRecoverySource = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const copy = recoveryCopies.find((item) => item.id === copyNeedingSource);
+    event.target.value = '';
+    if (!file || !copy) return;
+
+    try {
+      await StorageService.saveRecoveryFileForCopy(copy.id, file);
+      await handleRestoreCopy(copy);
+    } catch (error) {
+      setRestorationError(error instanceof Error ? error.message : 'The selected file could not be verified.');
     }
   };
 
@@ -117,6 +137,31 @@ export const FileRecovery: React.FC<FileRecoveryProps> = ({
           </div>
         </div>
 
+        {restorationError && (
+          <div role="alert" className="p-4 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-xs text-rose-900 dark:text-rose-300">
+            <p className="font-bold">File was not restored</p>
+            <p className="mt-1">{restorationError}</p>
+            {copyNeedingSource && (
+              <div className="mt-3">
+                <p className="mb-2">If you still have the original file, select it to verify its SHA-256 hash and restore it to the app’s internal Downloads folder.</p>
+                <button
+                  type="button"
+                  onClick={() => recoveryFileInputRef.current?.click()}
+                  className="px-3 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-semibold"
+                >
+                  Select original file to verify
+                </button>
+                <input
+                  ref={recoveryFileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleChooseRecoverySource}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Restoration Alert / Download Notification */}
         {restorationAlert && (
           <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-xs text-emerald-900 dark:text-emerald-300 space-y-2 animate-in fade-in">
@@ -139,7 +184,7 @@ export const FileRecovery: React.FC<FileRecoveryProps> = ({
               </div>
               <div>
                 <span className="text-slate-500">Destination:</span>{' '}
-                <span className="text-cyan-700 dark:text-cyan-400">{restorationAlert.restoredPath} (and User Downloads)</span>
+                <span className="text-cyan-700 dark:text-cyan-400">{restorationAlert.destination}</span>
               </div>
               <div>
                 <span className="text-slate-500">Cryptographic Bit-Match:</span>{' '}
@@ -232,7 +277,9 @@ export const FileRecovery: React.FC<FileRecoveryProps> = ({
                         {copy.restoredOutputPath && (
                           <div className="text-emerald-700 dark:text-emerald-400">
                             <span className="text-slate-500">Restored To:</span>{' '}
-                            {copy.restoredOutputPath}
+                            {copy.restoredOutputPath.startsWith('Browser Downloads')
+                              ? copy.restoredOutputPath
+                              : `/app-data/restored-output/${copy.originalFileName}`}
                           </div>
                         )}
                       </div>

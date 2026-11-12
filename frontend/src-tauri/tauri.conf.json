@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "identifier": "com.cipherlabs.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeDevCommand": "npm --prefix .. run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm --prefix .. run build",
+    "frontendDist": "../../dist"
   },
   "app": {
     "windows": [
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8765; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8765 https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com wss://*.firebaseio.com; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com; img-src 'self' data: https://*.googleusercontent.com; style-src 'self' 'unsafe-inline'; form-action 'self' https://*.firebaseapp.com https://accounts.google.com"
     }
   },
   "plugins": {
@@ -36,7 +36,6 @@
     "active": true,
     "targets": ["nsis"],
     "externalBin": ["binaries/cipher-backend"],
-    "icon": ["icons/icon.ico"],
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"

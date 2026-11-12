@@ -4,8 +4,9 @@
 
 $ErrorActionPreference = "Stop"
 
-$backendDir = Join-Path $PSScriptRoot "..\backend"
-$targetDir = Join-Path $PSScriptRoot "..\frontend\src-tauri\binaries"
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$backendDir = Join-Path $projectRoot "backend"
+$targetDir = Join-Path $projectRoot "frontend\src-tauri\binaries"
 
 if (-not (Test-Path $targetDir)) {
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
@@ -18,6 +19,12 @@ try {
     $py = "python"
     if (Test-Path ".\.venv\Scripts\python.exe") {
         $py = ".\.venv\Scripts\python.exe"
+    }
+
+    & $py -m PyInstaller --version
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "PyInstaller is missing. Install backend requirements into backend\.venv first."
+        exit 1
     }
 
     & $py -m PyInstaller --clean --noconfirm --onefile --noconsole `
