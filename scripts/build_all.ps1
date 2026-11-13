@@ -12,43 +12,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host ">>> STEP 2: Loading Configuration & Exporting Build-Time Environment..." -ForegroundColor Cyan
-$mongoEnvFile = Join-Path $projectRoot "frontend\src-tauri\config\mongodb.env"
-if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $projectRoot ".env"
-}
-if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $projectRoot "backend\.env"
-}
-
-if (Test-Path $mongoEnvFile) {
-    Get-Content $mongoEnvFile | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
-            $parts = $line.Split('=', 2)
-            $name = $parts[0].Trim()
-            $val = $parts[1].Trim().Trim('"').Trim("'")
-            [System.Environment]::SetEnvironmentVariable($name, $val, [System.EnvironmentVariableTarget]::Process)
-            switch ($name) {
-                { $_ -in "MONGODB_URI", "CIPHER_MONGODB_URI" } {
-                    [System.Environment]::SetEnvironmentVariable("MONGODB_URI", $val, [System.EnvironmentVariableTarget]::Process)
-                    [System.Environment]::SetEnvironmentVariable("CIPHER_MONGODB_URI", $val, [System.EnvironmentVariableTarget]::Process)
-                }
-                { $_ -in "JWT_SECRET", "CIPHER_JWT_SECRET" } {
-                    [System.Environment]::SetEnvironmentVariable("JWT_SECRET", $val, [System.EnvironmentVariableTarget]::Process)
-                    [System.Environment]::SetEnvironmentVariable("CIPHER_JWT_SECRET", $val, [System.EnvironmentVariableTarget]::Process)
-                }
-                { $_ -in "MONGODB_DB_NAME", "CIPHER_MONGODB_DB_NAME" } {
-                    [System.Environment]::SetEnvironmentVariable("MONGODB_DB_NAME", $val, [System.EnvironmentVariableTarget]::Process)
-                    [System.Environment]::SetEnvironmentVariable("CIPHER_MONGODB_DB_NAME", $val, [System.EnvironmentVariableTarget]::Process)
-                }
-            }
-        }
-    }
-    Write-Host "  Loaded MongoDB Atlas & JWT environment variables into caller process." -ForegroundColor Green
-} else {
-    Write-Host "  No mongodb.env found. Packaging in CONFIG_MISSING mode." -ForegroundColor Yellow
-}
+Write-Host ">>> STEP 2: Building without embedded credentials..." -ForegroundColor Cyan
+Write-Host "  MongoDB settings are loaded from the user's desktop config at runtime." -ForegroundColor Green
 
 Write-Host ">>> STEP 3: Building Backend Sidecar Executable..." -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "build_backend.ps1")

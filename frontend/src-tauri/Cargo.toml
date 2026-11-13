@@ -1,6 +1,6 @@
 [package]
 name = "cipher-labs-desktop"
-version = "1.0.0"
+version = "1.0.1"
 description = "Cipher Labs - Digital Forensics and Data Sanitization"
 authors = ["Cipher Labs Team"]
 edition = "2021"

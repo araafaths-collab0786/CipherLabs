@@ -143,7 +143,7 @@ const DEFAULT_DEVICE: DeviceRecord = {
   label: 'Forensic Workstation Win11-Pro',
   osName: 'Windows',
   osVersion: '11 Pro 23H2 (Build 22631.3007)',
-  appVersion: '1.0.0',
+  appVersion: '1.0.1',
   lastSeenAt: new Date().toISOString(),
 };
 

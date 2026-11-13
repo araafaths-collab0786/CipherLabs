@@ -174,6 +174,24 @@ These boundaries are intentional to ensure controlled and safe testing.
 
 ## Installation & Setup
 
+### Installed Desktop Runtime Configuration
+
+The Windows installer does not contain MongoDB credentials. On first launch, Cipher Labs creates a per-user configuration file at:
+
+```text
+%APPDATA%\com.cipherlabs.desktop\cipherlabs.env
+```
+
+Edit that file to connect the desktop app to MongoDB Atlas:
+
+```dotenv
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+MONGODB_DB_NAME=cipher_labs
+JWT_SECRET=<a unique, randomly generated secret>
+```
+
+If `JWT_SECRET` is left blank, the app generates and saves a unique per-user key under its application data directory. Keep both configuration files private. Restart Cipher Labs after editing the config.
+
 ### Prerequisites
 
 - Windows 10 (21H2 or later) / Windows 11 (64-bit).

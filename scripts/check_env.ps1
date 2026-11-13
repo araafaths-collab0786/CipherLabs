@@ -104,33 +104,7 @@ try {
     Report-Check "Tauri CLI" $false "Tauri CLI could not run"
 }
 
-# 7. MongoDB Atlas Configuration Validation (Credentials are NEVER printed)
-$mongoEnvFile = Join-Path $projectRoot "frontend\src-tauri\config\mongodb.env"
-if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $projectRoot ".env"
-}
-if (-not (Test-Path $mongoEnvFile)) {
-    $mongoEnvFile = Join-Path $projectRoot "backend\.env"
-}
-
-if (Test-Path $mongoEnvFile) {
-    $envContent = Get-Content $mongoEnvFile -Raw
-    $uriMatches = [regex]::Match($envContent, "(?m)^\s*(?:CIPHER_)?MONGODB_URI\s*=\s*['""]?((?:mongodb(?:\+srv)?):\/\/[^\s'""\r\n]+)")
-    if ($uriMatches.Success) {
-        Report-Check "MongoDB Atlas URI" $true "Present and format OK (mongodb+srv:// cluster protocol validated)"
-    } else {
-        Report-Check "MongoDB Atlas URI" $false "Missing or invalid format (must start with mongodb+srv:// or mongodb://)"
-    }
-
-    $jwtMatches = [regex]::Match($envContent, "(?m)^\s*(?:CIPHER_)?JWT_SECRET\s*=\s*['""]?([^\s'""\r\n]+)")
-    if ($jwtMatches.Success) {
-        Report-Check "JWT Secret Key" $true "Present and format OK (FastAPI auth secret configured)"
-    } else {
-        Report-Check "JWT Secret Key" $true "Optional in development (fallback default entropy used)"
-    }
-} else {
-    Write-Host " [INFO] mongodb.env not present. System running in deliberate CONFIG_MISSING mode." -ForegroundColor Yellow
-}
+Write-Host " [INFO] Runtime credentials are never embedded in the installer." -ForegroundColor Green
 
 Write-Host "========================================================" -ForegroundColor Cyan
 if ($allPassed) {

@@ -153,7 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </p>
             <div className="pt-1 flex items-center justify-between text-[10px] text-slate-500">
               <span>Forensics Engine</span>
-              <span className="text-cyan-600 dark:text-cyan-400 font-mono">v1.0.0</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-mono">v1.0.1</span>
             </div>
           </div>
         )}

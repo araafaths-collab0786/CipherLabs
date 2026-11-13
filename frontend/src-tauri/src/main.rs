@@ -93,11 +93,6 @@ fn write_unique_file(directory: &Path, file_name: &str, bytes: &[u8]) -> Result<
     Err("Could not find an unused destination name for the restored file.".to_string())
 }
 
-// Compile-time credentials injected by build_all.ps1.
-const MONGODB_URI: Option<&str> = option_env!("CIPHER_MONGODB_URI");
-const JWT_SECRET: Option<&str> = option_env!("CIPHER_JWT_SECRET");
-const MONGODB_DB_NAME: Option<&str> = option_env!("CIPHER_MONGODB_DB_NAME");
-
 fn main() {
     env_logger::init();
 
@@ -110,23 +105,29 @@ fn main() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
+            let config_dir = app.path().app_config_dir()?;
+            std::fs::create_dir_all(&config_dir)?;
+            let config_file = config_dir.join("cipherlabs.env");
+            if !config_file.exists() {
+                fs::write(
+                    &config_file,
+                    "# Cipher Labs desktop runtime configuration\n\
+                     MONGODB_URI=\n\
+                     MONGODB_DB_NAME=cipher_labs\n\
+                     JWT_SECRET=\n",
+                )?;
+            }
 
-            log::info!("Starting Cipher Labs FastAPI sidecar engine with MongoDB Atlas...");
+            log::info!("Starting Cipher Labs FastAPI sidecar engine...");
 
-            let mut cmd = app
+            let cmd = app
                 .shell()
                 .sidecar("cipher-backend")?
-                .env("CIPHER_APP_DATA", data_dir.to_string_lossy().to_string());
-
-            if let Some(uri) = MONGODB_URI {
-                cmd = cmd.env("MONGODB_URI", uri);
-            }
-            if let Some(jwt) = JWT_SECRET {
-                cmd = cmd.env("JWT_SECRET", jwt);
-            }
-            if let Some(database_name) = MONGODB_DB_NAME {
-                cmd = cmd.env("MONGODB_DB_NAME", database_name);
-            }
+                .env("CIPHER_APP_DATA", data_dir.to_string_lossy().to_string())
+                .env(
+                    "CIPHER_CONFIG_FILE",
+                    config_file.to_string_lossy().to_string(),
+                );
 
             let (mut rx, child) = cmd.spawn()?;
             *app.state::<Backend>().0.lock().unwrap() = Some(child);

@@ -6,7 +6,7 @@ All 5 conflicts between PART 5, 7, 10, 14, and build requirements have been reso
 
 Reconciled Corrections:
 1. Supabase Key Validation: Modern `sb_publishable_...` keys are the default standard; legacy 3-segment JWT anon keys are supported for backward compatibility. Key values are never printed.
-2. Build Automation: `scripts/build_all.ps1` is the single authoritative release-build script. It loads configuration, exports environment variables in the parent process, and executes backend sidecar packaging, frontend tests, frontend build, and Tauri packaging in verified order.
+2. Build Automation: `scripts/build_all.ps1` is the single authoritative release-build script. It packages the backend sidecar, runs configured tests, builds the frontend, and creates the Tauri installer without embedding runtime credentials.
 3. Desktop Auth Callbacks: Tauri deep-link plugin (`tauri-plugin-deep-link`) integration with custom protocol `com.cipherlabs.desktop://auth/callback`, Rust 1.90+ minimum requirement, and Supabase redirect URI synchronization.
 4. Audit Log Integrity & Report Idempotency: Direct table inserts to `audit_log` are revoked; append-only entries are written exclusively via a security-definer database function `public.log_audit_event()` that cryptographically chains hashes. Reports table enforces idempotency via `idempotency_key` and `unique (user_id, idempotency_key)`.
 5. Fresh-Clone Installation Order: Prerequisite environment checks (Node.js, Rust, Python) run before package installation. Dependencies are installed via `npm ci` / `npm install` before validating the local Tauri CLI version, preventing fresh-clone deadlocks.
